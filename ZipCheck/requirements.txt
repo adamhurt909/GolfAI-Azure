@@ -1,7 +1,0 @@
-streamlit
-opencv-python
-mediapipe
-numpy
-openai
-pandas
-matplotlib
