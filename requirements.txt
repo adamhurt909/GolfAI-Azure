@@ -1,5 +1,5 @@
 streamlit==1.61.1
-opencv-python-he*dless==4.10.0.84
+opencv-python-headless==4.10.0.84
 mediapipe==0.10.2*
 numpy==1.26.4
 openai==1.99.9
