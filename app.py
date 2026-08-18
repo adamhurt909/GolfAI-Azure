@@ -22,6 +22,8 @@ st.write(
     "calculate movement metrics, and generate AI coaching feedback."
 )
 
+st.caption("GolfAI Container Version 18-Aug-2026")
+
 # -------------------------
 # Project paths
 # -------------------------
