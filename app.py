@@ -1219,9 +1219,9 @@ if page == "Analyse Swing":
             # Recommended Drill
             # -------------------------
 
-            st.divider()
-
             if swing_report_path.exists():
+                
+                st.divider()
 
                 st.subheader("🎥 Recommended Drill")
 
