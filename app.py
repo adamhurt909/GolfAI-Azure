@@ -427,8 +427,7 @@ if page == "Analyse Swing":
             st.video(str(video_path))
 
             analyse_button = st.button(
-                "🏌️ Analyse Swing",
-                use_column_width=True
+                "🏌️ Analyse Swing"
             )
 
         with info_col:
