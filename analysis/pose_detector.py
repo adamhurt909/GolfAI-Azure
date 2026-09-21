@@ -28,11 +28,25 @@ print("")
 if len(sys.argv) > 1:
     video_path = sys.argv[1]
 else:
-    video_path = r"videos\adam_driver_1.mp4"
+    video_path = r"videos\Adam_27thJune_26.mp4"
 
 
 
 cap = cv2.VideoCapture(video_path)
+
+video_fps = cap.get(
+    cv2.CAP_PROP_FPS
+)
+
+if video_fps <= 0:
+    video_fps = 30.0
+
+print("")
+print("VIDEO CHECK")
+print("-----------")
+print(f"Video path: {video_path}")
+print(f"Video opened: {cap.isOpened()}")
+print("")
 
 mp_pose = mp.solutions.pose
 
@@ -80,6 +94,19 @@ def midpoint(point_a, point_b):
         "y": (point_a.y + point_b.y) / 2
     }
 
+def dictionary_distance(point_a, point_b):
+    return math.sqrt(
+        (
+            point_a["x"]
+            - point_b["x"]
+        ) ** 2
+        +
+        (
+            point_a["y"]
+            - point_b["y"]
+        ) ** 2
+    )
+
 def line_angle(point_a, point_b):
     dx = point_b["x"] - point_a["x"]
     dy = point_b["y"] - point_a["y"]
@@ -91,32 +118,17 @@ def line_angle(point_a, point_b):
         )
     )
 
-
 def landmark_line_angle(
     point_a,
     point_b
 ):
 
-    dx = (
-        point_b.x
-        - point_a.x
-    )
-
-    dy = (
-        point_b.y
-        - point_a.y
-    )
+    dx = point_b.x - point_a.x
+    dy = point_b.y - point_a.y
 
     return math.degrees(
-        math.atan2(
-            dy,
-            dx
-        )
+        math.atan2(dy, dx)
     )
-    dx = point_b["x"] - point_a["x"]
-    dy = point_b["y"] - point_a["y"]
-
-    return math.degrees(math.atan2(dy, dx))
 
 def angle_difference(angle_1, angle_2):
     difference = angle_2 - angle_1
@@ -154,18 +166,131 @@ with mp_pose.Pose(
 cap.release()
 
 def get_landmarks(frame_number):
-    landmarks = landmarks_by_frame[frame_number]
+
+    print(
+        f"Requested frame: {frame_number}"
+    )
+
+    print(
+        f"Available frames: {len(landmarks_by_frame)}"
+    )
+
+    if (
+        frame_number < 0
+        or
+        frame_number >= len(landmarks_by_frame)
+    ):
+        raise ValueError(
+            f"Frame {frame_number} is outside "
+            f"available range "
+            f"0-{len(landmarks_by_frame)-1}"
+        )
+
+    landmarks = landmarks_by_frame[
+        frame_number
+    ]
 
     if landmarks is None:
-        print(f"ERROR: No landmarks found for frame {frame_number}")
-        exit()
+        raise ValueError(
+            f"No landmarks found at "
+            f"frame {frame_number}"
+        )
 
     return landmarks
+
+def get_nearest_landmarks(
+    frame_number,
+    maximum_offset=10
+):
+    frame_number = min(
+        len(landmarks_by_frame) - 1,
+        max(
+            0,
+            frame_number
+        )
+    )
+
+    if landmarks_by_frame[frame_number] is not None:
+        return (
+            landmarks_by_frame[frame_number],
+            frame_number
+        )
+
+    for offset in range(
+        1,
+        maximum_offset + 1
+    ):
+        later_frame = frame_number + offset
+
+        if (
+            later_frame < len(landmarks_by_frame)
+            and landmarks_by_frame[later_frame] is not None
+        ):
+            return (
+                landmarks_by_frame[later_frame],
+                later_frame
+            )
+
+        earlier_frame = frame_number - offset
+
+        if (
+            earlier_frame >= 0
+            and landmarks_by_frame[earlier_frame] is not None
+        ):
+            return (
+                landmarks_by_frame[earlier_frame],
+                earlier_frame
+            )
+
+    return None, frame_number
 
 address = get_landmarks(ADDRESS_FRAME)
 top = get_landmarks(TOP_FRAME)
 impact = get_landmarks(IMPACT_FRAME)
 finish = get_landmarks(FINISH_FRAME)
+
+finish_check_offset = max(
+    3,
+    round(
+        video_fps * 0.20
+    )
+)
+
+requested_finish_check_frame = min(
+    len(landmarks_by_frame) - 1,
+    FINISH_FRAME + finish_check_offset
+)
+
+finish_check, finish_check_frame = (
+    get_nearest_landmarks(
+        requested_finish_check_frame
+    )
+)
+
+# -------------------------
+# Tempo
+# -------------------------
+
+backswing_frames = (
+    TOP_FRAME
+    - ADDRESS_FRAME
+)
+
+downswing_frames = (
+    IMPACT_FRAME
+    - TOP_FRAME
+)
+
+if downswing_frames > 0:
+
+    tempo_ratio = (
+        backswing_frames
+        / downswing_frames
+    )
+
+else:
+
+    tempo_ratio = 0
 
 # -------------------------
 # Head movement
@@ -180,33 +305,87 @@ head_movement = distance_between_points(
 )
 
 # -------------------------
-# Lead arm extension at top
-# Assumes right-handed golfer, so lead arm = left arm
+# Arm structure at top
 # -------------------------
 
-top_left_shoulder = top[mp_pose.PoseLandmark.LEFT_SHOULDER]
-top_left_elbow = top[mp_pose.PoseLandmark.LEFT_ELBOW]
-top_left_wrist = top[mp_pose.PoseLandmark.LEFT_WRIST]
+top_left_shoulder = top[
+    mp_pose.PoseLandmark.LEFT_SHOULDER
+]
 
-lead_arm_angle_top = angle_between_three_points(
+top_left_elbow = top[
+    mp_pose.PoseLandmark.LEFT_ELBOW
+]
+
+top_left_wrist = top[
+    mp_pose.PoseLandmark.LEFT_WRIST
+]
+
+top_right_shoulder = top[
+    mp_pose.PoseLandmark.RIGHT_SHOULDER
+]
+
+top_right_elbow = top[
+    mp_pose.PoseLandmark.RIGHT_ELBOW
+]
+
+top_right_wrist = top[
+    mp_pose.PoseLandmark.RIGHT_WRIST
+]
+
+left_arm_angle = angle_between_three_points(
     top_left_shoulder,
     top_left_elbow,
     top_left_wrist
 )
 
-# -------------------------
-# Trail arm bend at top
-# For right-handed golfer, trail arm = right arm
-# -------------------------
-
-top_right_shoulder = top[mp_pose.PoseLandmark.RIGHT_SHOULDER]
-top_right_elbow = top[mp_pose.PoseLandmark.RIGHT_ELBOW]
-top_right_wrist = top[mp_pose.PoseLandmark.RIGHT_WRIST]
-
-trail_arm_angle_top = angle_between_three_points(
+right_arm_angle = angle_between_three_points(
     top_right_shoulder,
     top_right_elbow,
     top_right_wrist
+)
+
+# Lead arm should generally be the straighter arm
+# at the top of the backswing.
+#
+# Larger angle = straighter arm.
+
+lead_arm_angle_top = max(
+    left_arm_angle,
+    right_arm_angle
+)
+
+trail_arm_angle_top = min(
+    left_arm_angle,
+    right_arm_angle
+)
+
+# -------------------------
+# Swing Width
+# -------------------------
+
+swing_width = distance_between_points(
+    top_right_shoulder,
+    top_right_wrist
+)
+
+print("")
+print("ARM STRUCTURE AT TOP")
+print("--------------------")
+print(
+    f"Lead Arm : "
+    f"{lead_arm_angle_top:.2f}"
+)
+print(
+    f"Trail Arm: "
+    f"{trail_arm_angle_top:.2f}"
+)
+
+print("")
+print("SWING WIDTH")
+print("----------------")
+print(
+    f"Shoulder to Wrist: "
+    f"{swing_width:.4f}"
 )
 
 # -------------------------
@@ -245,6 +424,86 @@ address_hip_midpoint = midpoint(
     address_right_hip
 )
 
+top_hip_midpoint = midpoint(
+    top_left_hip,
+    top_right_hip
+)
+
+# -------------------------
+# Hip Sway
+# -------------------------
+
+hip_sway = abs(
+    top_hip_midpoint["x"]
+    - address_hip_midpoint["x"]
+)
+
+# -------------------------
+# Finish Stability
+# -------------------------
+# This is a 2D stability proxy, not a direct measurement
+# of physical balance.
+#
+# It measures average head and hip-centre movement during
+# the first 0.2 seconds after the detected Finish frame.
+
+if finish_check is not None:
+
+    finish_nose = finish[
+        mp_pose.PoseLandmark.NOSE
+    ]
+
+    finish_check_nose = finish_check[
+        mp_pose.PoseLandmark.NOSE
+    ]
+
+    finish_left_hip = finish[
+        mp_pose.PoseLandmark.LEFT_HIP
+    ]
+
+    finish_right_hip = finish[
+        mp_pose.PoseLandmark.RIGHT_HIP
+    ]
+
+    finish_check_left_hip = finish_check[
+        mp_pose.PoseLandmark.LEFT_HIP
+    ]
+
+    finish_check_right_hip = finish_check[
+        mp_pose.PoseLandmark.RIGHT_HIP
+    ]
+
+    finish_hip_midpoint = midpoint(
+        finish_left_hip,
+        finish_right_hip
+    )
+
+    finish_check_hip_midpoint = midpoint(
+        finish_check_left_hip,
+        finish_check_right_hip
+    )
+
+    finish_head_movement = distance_between_points(
+        finish_nose,
+        finish_check_nose
+    )
+
+    finish_hip_movement = dictionary_distance(
+        finish_hip_midpoint,
+        finish_check_hip_midpoint
+    )
+
+    finish_stability = (
+        finish_head_movement
+        + finish_hip_movement
+    ) / 2
+
+else:
+
+    finish_head_movement = 0
+    finish_hip_movement = 0
+    finish_stability = 0
+
 impact_shoulder_midpoint = midpoint(
     impact_left_shoulder,
     impact_right_shoulder
@@ -271,53 +530,6 @@ spine_angle_change = angle_difference(
 )
 
 # -------------------------
-# Shoulder turn
-# -------------------------
-
-address_shoulder_turn = landmark_line_angle(
-    address_left_shoulder,
-    address_right_shoulder
-)
-
-top_shoulder_turn = landmark_line_angle(
-    top_left_shoulder,
-    top_right_shoulder
-)
-
-shoulder_turn_change = angle_difference(
-    address_shoulder_turn,
-    top_shoulder_turn
-)
-
-# -------------------------
-# Hip turn
-# -------------------------
-
-address_hip_turn = landmark_line_angle(
-    address_left_hip,
-    address_right_hip
-)
-
-top_hip_turn = landmark_line_angle(
-    top_left_hip,
-    top_right_hip
-)
-
-hip_turn_change = angle_difference(
-    address_hip_turn,
-    top_hip_turn
-)
-
-# -------------------------
-# X-Factor
-# -------------------------
-
-x_factor = (
-    shoulder_turn_change
-    - hip_turn_change
-)
-
-# -------------------------
 # Report
 # -------------------------
 
@@ -335,29 +547,68 @@ print("HEAD MOVEMENT")
 print(f"Head movement, address to impact: {head_movement:.4f}")
 
 print("")
+print("TEMPO")
+print("----------------")
+print(
+    f"Backswing frames: "
+    f"{backswing_frames}"
+)
+
+print(
+    f"Downswing frames: "
+    f"{downswing_frames}"
+)
+
+print(
+    f"Tempo Ratio: "
+    f"{tempo_ratio:.2f}:1"
+)
+
+print("")
 print("ARM STRUCTURE AT TOP")
 print(f"Lead arm angle at top: {lead_arm_angle_top:.2f} degrees")
 print(f"Trail arm angle at top: {trail_arm_angle_top:.2f} degrees")
 
 print("")
-print("SHOULDER TURN")
+print("HIP SWAY")
+print("----------------")
 print(
-    f"Shoulder turn: "
-    f"{shoulder_turn_change:.2f} degrees"
+    f"Address Hip Midpoint X: "
+    f"{address_hip_midpoint['x']:.4f}"
+)
+
+print(
+    f"Top Hip Midpoint X: "
+    f"{top_hip_midpoint['x']:.4f}"
+)
+
+print(
+    f"Hip Movement: "
+    f"{hip_sway:.4f}"
 )
 
 print("")
-print("HIP TURN")
+print("FINISH STABILITY")
+print("----------------")
 print(
-    f"Hip turn: "
-    f"{hip_turn_change:.2f} degrees"
+    f"Finish Frame: "
+    f"{FINISH_FRAME}"
 )
-
-print("")
-print("X-FACTOR")
 print(
-    f"X-Factor: "
-    f"{x_factor:.2f} degrees"
+    f"Stability Check Frame: "
+    f"{finish_check_frame}"
+)
+print(
+    f"Head Movement After Finish: "
+    f"{finish_head_movement:.4f}"
+)
+print(
+    f"Hip Movement After Finish: "
+    f"{finish_hip_movement:.4f}"
+)
+print(
+    f"Finish Stability Movement: "
+    f"{finish_stability:.4f}"
 )
 
 print("")
@@ -370,6 +621,24 @@ print("")
 print("BASIC INTERPRETATION")
 
 findings = []
+
+if finish_stability <= 0.01:
+
+    findings.append(
+        "Finish position appears stable after the swing."
+    )
+
+elif finish_stability <= 0.025:
+
+    findings.append(
+        "Finish position shows moderate movement."
+    )
+
+else:
+
+    findings.append(
+        "Finish position moves noticeably after the swing."
+    )
 
 if head_movement < 0.05:
     findings.append("Head movement appears low.")
@@ -397,6 +666,19 @@ elif spine_angle_change < 15:
 else:
     findings.append("Spine angle changes significantly through impact.")
 
+if tempo_ratio >= 2.7 and tempo_ratio <= 3.3:
+    findings.append(
+        "Tempo is close to the ideal 3:1 ratio."
+    )
+elif tempo_ratio < 2.7:
+    findings.append(
+        "Downswing may be too slow relative to backswing."
+    )
+else:
+    findings.append(
+        "Backswing may be too slow relative to downswing."
+    )
+
 for finding in findings:
     print(f"- {finding}")
 
@@ -409,11 +691,12 @@ swing_report = {
     },
     "metrics": {
         "head_movement_address_to_impact": round(head_movement, 4),
+        "tempo_ratio": round(tempo_ratio, 2),
+        "swing_width": round(swing_width, 4),
+        "hip_sway": round(hip_sway, 4),
+        "finish_stability": round(finish_stability, 4),
         "lead_arm_angle_at_top_degrees": round(lead_arm_angle_top, 2),
         "trail_arm_angle_at_top_degrees": round(trail_arm_angle_top, 2),
-        "shoulder_turn_change_degrees": round(shoulder_turn_change, 2),
-        "hip_turn_change_degrees": round(hip_turn_change, 2),
-        "x_factor_degrees": round(x_factor, 2),
         "spine_angle_at_address_degrees": round(address_spine_angle, 2),
         "spine_angle_at_impact_degrees": round(impact_spine_angle, 2),
         "spine_angle_change_degrees": round(spine_angle_change, 2)

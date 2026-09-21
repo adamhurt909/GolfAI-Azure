@@ -48,6 +48,8 @@ def fill_missing(values):
 
 
 def smooth(values, window_size=9):
+    values = np.array(values, dtype=float)
+
     if window_size < 3:
         return values
 
@@ -68,6 +70,69 @@ def smooth(values, window_size=9):
     return smoothed_values
 
 
+def first_sustained_above(
+    values,
+    threshold,
+    start,
+    end,
+    min_run=6
+):
+    end = min(
+        end,
+        len(values) - min_run
+    )
+
+    for i in range(start, end):
+
+        window = values[
+            i:i + min_run
+        ]
+
+        if np.all(window > threshold):
+            return i
+
+    return None
+
+
+def last_above(
+    values,
+    threshold,
+    start,
+    end
+):
+    end = min(
+        end,
+        len(values)
+    )
+
+    candidates = np.where(
+        values[start:end] > threshold
+    )[0]
+
+    if len(candidates) == 0:
+        return None
+
+    return start + candidates[-1]
+
+def first_sustained_above(
+    values,
+    threshold,
+    min_run=8
+):
+    for i in range(
+        len(values) - min_run
+    ):
+
+        if np.all(
+            values[
+                i:i + min_run
+            ] > threshold
+        ):
+            return i
+
+    return None
+
+
 def show_frame(frame, label, frame_number):
     display_frame = frame.copy()
 
@@ -84,7 +149,6 @@ def show_frame(frame, label, frame_number):
     cv2.imshow(label, display_frame)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-
 
 # -------------------------
 # Extract wrist positions
@@ -167,174 +231,272 @@ hand_speed_smooth = smooth(
 total_frames = len(frames)
 
 # -------------------------
-# Estimate Address
+# Address Detection
 # -------------------------
-# Address is the final slow/stable frame
-# before the hands begin moving away.
 
-address_search_end = int(total_frames * 0.25)
+fps = 30
 
-early_speed = hand_speed_smooth[:address_search_end]
+baseline_speed = hand_speed_smooth[:40]
 
-takeaway_threshold = np.percentile(
-    early_speed,
-    75
+speed_threshold = (
+    np.mean(baseline_speed)
+    + (
+        np.std(baseline_speed) * 2
+    )
 )
 
-takeaway_candidates = np.where(
-    early_speed > takeaway_threshold
-)[0]
-
-if len(takeaway_candidates) > 0:
-
-    takeaway_frame = takeaway_candidates[0]
-
-    address_frame = max(
-        0,
-        takeaway_frame - 20
+takeaway_frame = (
+    first_sustained_above(
+        hand_speed_smooth,
+        speed_threshold,
+        min_run=8
     )
+)
 
-else:
+if takeaway_frame is None:
+    takeaway_frame = 40
 
-    takeaway_frame = -1
-    address_frame = 0
+address_frame = max(
+    0,
+    takeaway_frame - int(fps * 0.5)
+)
 
 print("")
+print("ADDRESS DETECTION")
+print("----------------")
 print(f"Takeaway frame: {takeaway_frame}")
-print(f"Address frame: {address_frame}")
+print(f"Address frame : {address_frame}")
+print("")
+
 
 # -------------------------
-# Estimate impact acceleration area
+# Top Of Backswing Detection
 # -------------------------
-# Impact usually happens during the strongest early burst of hand speed.
-# We ignore the final part of the video to avoid picking up finish movement.
+# The top is the transition point immediately before the
+# sustained downswing acceleration.
+#
+# We identify it by finding a low-speed turning point before
+# the dominant downswing speed burst, while requiring the hands
+# to be meaningfully displaced from their address position.
 
-impact_search_start = max(
-    address_frame + 20,
-    30
-)
+fps = cap.get(cv2.CAP_PROP_FPS)
 
-impact_search_end = int(total_frames * 0.70)
-
-impact_speed_region = hand_speed_smooth[
-    impact_search_start:impact_search_end
-]
-
-impact_burst_frame = impact_search_start + np.argmax(
-    impact_speed_region
-)
-
-# -------------------------
-# Estimate Top of Backswing
-# -------------------------
-# Top should happen before the impact burst.
-# In image coordinates, smaller Y means higher on screen.
-
-top_search_start = address_frame + 10
-top_search_end = impact_burst_frame
-
-if top_search_end <= top_search_start:
-    top_frame = top_search_start
-else:
-    top_frame = top_search_start + np.argmin(
-        hand_y_smooth[top_search_start:top_search_end]
-    )
-
-# -------------------------
-# Estimate Impact
-# -------------------------
-# Search only the early part of the downswing.
-# This helps avoid selecting a point deep in the follow-through.
-
-impact_window_start = top_frame + 1
-
-impact_window_end = min(
-    impact_search_end,
-    top_frame + 36
-)
+if fps <= 0:
+    fps = 30.0
 
 address_hand_x = hand_x_smooth[address_frame]
 address_hand_y = hand_y_smooth[address_frame]
 
-distance_to_address = np.sqrt(
-    (
-        hand_x_smooth[
-            impact_window_start:impact_window_end
-        ] - address_hand_x
-    ) ** 2
+hand_displacement = np.sqrt(
+    (hand_x_smooth - address_hand_x) ** 2
     +
-    (
-        hand_y_smooth[
-            impact_window_start:impact_window_end
-        ] - address_hand_y
-    ) ** 2
+    (hand_y_smooth - address_hand_y) ** 2
 )
 
-if len(distance_to_address) > 0:
-    impact_frame = (
-        impact_window_start
-        + np.argmin(distance_to_address)
-    )
-else:
-    impact_frame = impact_burst_frame
-
-# -------------------------
-# Estimate Finish
-# -------------------------
-# Finish is when hand movement settles after impact.
-# Search after impact for a low-speed region.
-
-finish_search_start = min(
+# Locate the dominant downswing acceleration.
+# Ignore the initial setup and the final portion of the video.
+impact_burst_search_start = min(
     total_frames - 1,
-    impact_frame + 10
+    address_frame + max(1, int(fps * 0.5))
 )
 
-finish_search_end = min(
-    total_frames,
-    impact_frame + 80
+impact_burst_search_end = max(
+    impact_burst_search_start + 1,
+    int(total_frames * 0.85)
 )
 
-# -------------------------
-# Estimate Finish
-# -------------------------
-# Finish is the highest hand position reached
-# after impact before the golfer relaxes.
-
-finish_search_start = impact_frame + 10
-
-finish_search_end = min(
-    total_frames,
-    impact_frame + 80
+impact_burst_frame = (
+    impact_burst_search_start
+    + int(
+        np.argmax(
+            hand_speed_smooth[
+                impact_burst_search_start:
+                impact_burst_search_end
+            ]
+        )
+    )
 )
 
-finish_region_y = hand_y_smooth[
-    finish_search_start:finish_search_end
+# Search backwards from the acceleration burst.
+# The bounds are based on seconds, not fixed frame numbers.
+top_search_start = max(
+    address_frame + 1,
+    impact_burst_frame - int(fps * 2.0)
+)
+
+top_search_end = max(
+    top_search_start + 1,
+    impact_burst_frame - max(1, int(fps * 0.05))
+)
+
+search_speed = hand_speed_smooth[
+    top_search_start:
+    top_search_end
 ]
 
-if len(finish_region_y) > 0:
+search_displacement = hand_displacement[
+    top_search_start:
+    top_search_end
+]
 
-    finish_frame = (
-        finish_search_start
-        + np.argmin(finish_region_y)
+if len(search_speed) == 0:
+
+    top_frame = max(
+        address_frame + 1,
+        impact_burst_frame - max(1, int(fps * 0.25))
     )
 
 else:
 
-    finish_frame = finish_search_start
+    # Normalise speed and displacement so they can be combined.
+    speed_range = np.ptp(search_speed)
+    displacement_range = np.ptp(search_displacement)
 
+    if speed_range > 0:
+        normalised_speed = (
+            search_speed - np.min(search_speed)
+        ) / speed_range
+    else:
+        normalised_speed = np.zeros_like(search_speed)
+
+    if displacement_range > 0:
+        normalised_displacement = (
+            search_displacement
+            - np.min(search_displacement)
+        ) / displacement_range
+    else:
+        normalised_displacement = np.zeros_like(
+            search_displacement
+        )
+
+    # A good top candidate has:
+    # 1. Low hand speed, indicating the transition
+    # 2. High displacement from address, indicating a completed backswing
+    top_score = (
+        normalised_displacement
+        -
+        normalised_speed
+    )
+
+    top_frame = (
+        top_search_start
+        + int(np.argmax(top_score))
+    )
+
+print("")
+print("TOP OF BACKSWING DETECTION")
+print("--------------------------")
+print(f"Video FPS: {fps:.2f}")
+print(f"Impact speed burst: {impact_burst_frame}")
+print(
+    f"Top search range: "
+    f"{top_search_start} to {top_search_end}"
+)
+print(f"Top frame: {top_frame}")
+print(
+    f"Frames from top to speed burst: "
+    f"{impact_burst_frame - top_frame}"
+)
+print("")
+
+# -------------------------
+# Impact Detection
+# -------------------------
+
+impact_search_start = top_frame
+
+impact_search_end = min(
+    total_frames,
+    top_frame + 120
+)
+
+impact_region = hand_y_smooth[
+    impact_search_start:
+    impact_search_end
+]
+
+impact_frame = (
+    impact_search_start
+    + np.argmax(
+        impact_region
+    )
+)
+
+print("")
+print("IMPACT DETECTION")
+print("----------------")
+print(f"Impact frame: {impact_frame}")
+print("")
+
+# -------------------------
+# Estimate Finish
+# -------------------------
+# Do not use last_motion_frame here because it can include
+# lowering the club, walking, or returning to a neutral stance.
+#
+# Search within a window scaled from the backswing duration.
+# The finish is represented by the highest wrist position
+# during the bounded follow-through period.
+
+finish_search_start = (
+    impact_frame + 20
+)
+
+finish_search_end = min(
+    total_frames,
+    impact_frame + 150
+)
+
+finish_region = (
+    hand_speed_smooth[
+        finish_search_start:
+        finish_search_end
+    ]
+)
+
+finish_frame = (
+    finish_search_start
+    + np.argmin(
+        finish_region
+    )
+)
+
+# -------------------------
+# Safety checks
+# -------------------------
+# Keep the phases in the correct order.
+
+top_frame = max(
+    top_frame,
+    address_frame + 1
+)
+
+impact_frame = max(
+    impact_frame,
+    top_frame + 1
+)
+
+finish_frame = max(
+    finish_frame,
+    impact_frame + 1
+)
+
+finish_frame = min(
+    finish_frame,
+    total_frames - 1
+)
 
 # -------------------------
 # Print results
 # -------------------------
 
 print("")
-print("AUTOMATIC SWING PHASE DETECTION")
-print("--------------------------------")
-print(f"Frames analysed: {total_frames}")
-print(f"Estimated address frame: {address_frame}")
-print(f"Estimated top of backswing frame: {top_frame}")
-print(f"Estimated impact frame: {impact_frame}")
-print(f"Estimated finish frame: {finish_frame}")
+print("PHASE DETECTION RESULTS")
+print("----------------------")
+print(f"Address frame: {address_frame}")
+print(f"Top frame: {top_frame}")
+print(f"Impact frame: {impact_frame}")
+print(f"Finish frame: {finish_frame}")
 print("")
 
 # -------------------------
