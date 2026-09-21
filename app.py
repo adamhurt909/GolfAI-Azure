@@ -23,7 +23,7 @@ st.write(
     "calculate movement metrics, and generate AI coaching feedback."
 )
 
-st.caption("GolfAI Container Version 1: 18-Aug-2026")
+st.caption("GolfAI Container Version 2: 21-Sept-2026")
 
 page = st.sidebar.radio(
     "Navigation",
@@ -592,29 +592,25 @@ if page == "Analyse Swing":
                 if address_image_path.exists():
                     img1.image(
                         str(address_image_path),
-                        caption="Address",
-                        use_column_width=True
+                        caption="Address"
                     )
 
                 if top_image_path.exists():
                     img2.image(
                         str(top_image_path),
-                        caption="Top of Backswing",
-                        use_column_width=True
+                        caption="Top of Backswing"
                     )
 
                 if impact_image_path.exists():
                     img3.image(
                         str(impact_image_path),
-                        caption="Impact",
-                        use_column_width=True
+                        caption="Impact"
                     )
 
                 if finish_image_path.exists():
                     img4.image(
                         str(finish_image_path),
-                        caption="Finish",
-                        use_column_width=True
+                        caption="Finish"
                     )
 
             # -------------------------
@@ -654,6 +650,8 @@ if page == "Analyse Swing":
 
                     st.text(cleaned_output)
 
+                if pose_result.stderr:
+                    st.error(pose_result.stderr)
 
             # -------------------------
             # Swing Metrics
@@ -1223,60 +1221,62 @@ if page == "Analyse Swing":
 
             st.divider()
 
-            st.subheader("🎥 Recommended Drill")
+            if swing_report_path.exists():
 
-            st.caption(
-                f"Selected weakness: {worst_metric}"
-            )
+                st.subheader("🎥 Recommended Drill")
 
-            drill_info = DRILL_MAP.get(
-                worst_metric
-            )
-
-            if drill_info is not None:
-
-                st.markdown(
-                    f"### {drill_info['name']}"
+                st.caption(
+                    f"Selected weakness: {worst_metric}"
                 )
 
-                st.write(
-                    drill_info["description"]
+                drill_info = DRILL_MAP.get(
+                    worst_metric
                 )
 
-                drill_video_url = (
-                    drill_info["video_url"]
-                    .strip()
-                )
+                if drill_info is not None:
 
-                if drill_video_url:
-
-                    st.caption(
-                        f"Recommended because the lowest-rated "
-                        f"metric is {worst_metric}."
+                    st.markdown(
+                        f"### {drill_info['name']}"
                     )
 
-                    st.video(
-                        drill_video_url
+                    st.write(
+                        drill_info["description"]
                     )
 
-                    st.link_button(
-                        "▶️ Open drill on YouTube",
-                        drill_video_url
+                    drill_video_url = (
+                        drill_info["video_url"]
+                        .strip()
                     )
+
+                    if drill_video_url:
+
+                        st.caption(
+                            f"Recommended because the lowest-rated "
+                            f"metric is {worst_metric}."
+                        )
+
+                        st.video(
+                            drill_video_url
+                        )
+
+                        st.link_button(
+                            "▶️ Open drill on YouTube",
+                            drill_video_url
+                        )
+
+                    else:
+
+                        st.info(
+                            "A demonstration video has not yet "
+                            "been added for this drill."
+                        )
 
                 else:
 
-                    st.info(
-                        "A demonstration video has not yet "
-                        "been added for this drill."
+                    st.warning(
+                        f"No drill is currently mapped to: "
+                        f"{worst_metric}"
                     )
-
-            else:
-
-                st.warning(
-                    f"No drill is currently mapped to: "
-                    f"{worst_metric}"
-                )
 
 if page == "Compare Swings":
 
@@ -1669,15 +1669,13 @@ if (
         if address_1.exists():
             left.image(
                 str(address_1),
-                caption=compare_1,
-                use_column_width=True
+                caption=compare_1
             )
 
         if address_2.exists():
             right.image(
                 str(address_2),
-                caption=compare_2,
-                use_column_width=True
+                caption=compare_2
             )
 
         st.subheader("Top of Backswing")
@@ -1687,15 +1685,13 @@ if (
         if top_1.exists():
             left.image(
                 str(top_1),
-                caption=compare_1,
-                use_column_width=True
+                caption=compare_1
             )
 
         if top_2.exists():
             right.image(
                 str(top_2),
-                caption=compare_2,
-                use_column_width=True
+                caption=compare_2
             )
         st.subheader("Impact")
 
@@ -1704,15 +1700,13 @@ if (
         if impact_1.exists():
             left.image(
                 str(impact_1),
-                caption=compare_1,
-                use_column_width=True
+                caption=compare_1
             )
 
         if impact_2.exists():
             right.image(
                 str(impact_2),
-                caption=compare_2,
-                use_column_width=True
+                caption=compare_2
             )
 
         st.subheader("Finish")
@@ -1722,15 +1716,13 @@ if (
         if finish_1.exists():
             left.image(
                 str(finish_1),
-                caption=compare_1,
-                use_column_width=True
+                caption=compare_1
             )
 
         if finish_2.exists():
             right.image(
                 str(finish_2),
-                caption=compare_2,
-                use_column_width=True
+                caption=compare_2
             )
 
         st.divider()
