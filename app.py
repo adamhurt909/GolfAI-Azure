@@ -428,7 +428,7 @@ if page == "Analyse Swing":
 
             analyse_button = st.button(
                 "🏌️ Analyse Swing",
-                use_container_width=True
+                use_column_width=True
             )
 
         with info_col:
@@ -525,8 +525,8 @@ if page == "Analyse Swing":
                 if phase_result.stdout:
                     st.text(phase_result.stdout)
 
-    #                  if phase_result.stderr:
-    #                       st.text(phase_result.stderr)
+                if phase_result.stderr:
+                    st.text(phase_result.stderr)
 
             # -------------------------
             # Output file paths
@@ -594,28 +594,28 @@ if page == "Analyse Swing":
                     img1.image(
                         str(address_image_path),
                         caption="Address",
-                        use_container_width=True
+                        use_column_width=True
                     )
 
                 if top_image_path.exists():
                     img2.image(
                         str(top_image_path),
                         caption="Top of Backswing",
-                        use_container_width=True
+                        use_column_width=True
                     )
 
                 if impact_image_path.exists():
                     img3.image(
                         str(impact_image_path),
                         caption="Impact",
-                        use_container_width=True
+                        use_column_width=True
                     )
 
                 if finish_image_path.exists():
                     img4.image(
                         str(finish_image_path),
                         caption="Finish",
-                        use_container_width=True
+                        use_column_width=True
                     )
 
             # -------------------------
@@ -639,9 +639,6 @@ if page == "Analyse Swing":
 #              with st.expander("Pose detector output"):
 #                  if pose_result.stdout:
 #                     st.text(pose_result.stdout)
-
-#                 if pose_result.stderr:
-#                      st.text(pose_result.stderr)
 
             with st.expander("Pose detector output"):
 
@@ -1158,8 +1155,8 @@ if page == "Analyse Swing":
                 if coach_result.stdout:
                     st.text(coach_result.stdout)
 
-#                if coach_result.stderr:
-#                    st.text(coach_result.stderr)
+                if coach_result.stderr:
+                    st.text(coach_result.stderr)
 
             # -------------------------
             # Save Results Per Video
@@ -1674,14 +1671,14 @@ if (
             left.image(
                 str(address_1),
                 caption=compare_1,
-                use_container_width=True
+                use_column_width=True
             )
 
         if address_2.exists():
             right.image(
                 str(address_2),
                 caption=compare_2,
-                use_container_width=True
+                use_column_width=True
             )
 
         st.subheader("Top of Backswing")
@@ -1692,14 +1689,14 @@ if (
             left.image(
                 str(top_1),
                 caption=compare_1,
-                use_container_width=True
+                use_column_width=True
             )
 
         if top_2.exists():
             right.image(
                 str(top_2),
                 caption=compare_2,
-                use_container_width=True
+                use_column_width=True
             )
         st.subheader("Impact")
 
@@ -1709,14 +1706,14 @@ if (
             left.image(
                 str(impact_1),
                 caption=compare_1,
-                use_container_width=True
+                use_column_width=True
             )
 
         if impact_2.exists():
             right.image(
                 str(impact_2),
                 caption=compare_2,
-                use_container_width=True
+                use_column_width=True
             )
 
         st.subheader("Finish")
@@ -1727,14 +1724,14 @@ if (
             left.image(
                 str(finish_1),
                 caption=compare_1,
-                use_container_width=True
+                use_column_width=True
             )
 
         if finish_2.exists():
             right.image(
                 str(finish_2),
                 caption=compare_2,
-                use_container_width=True
+                use_column_width=True
             )
 
         st.divider()
