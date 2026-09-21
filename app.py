@@ -653,6 +653,17 @@ if page == "Analyse Swing":
                 if pose_result.stderr:
                     st.error(pose_result.stderr)
 
+            st.write("Swing report path:")
+            st.write(swing_report_path)
+
+            st.write("Swing report exists:")
+            st.write(swing_report_path.exists())
+
+            st.write("Data directory contents:")
+
+            for item in DATA_DIR.iterdir():
+                st.write(item.name)
+
             # -------------------------
             # Swing Metrics
             # -------------------------
@@ -1220,7 +1231,7 @@ if page == "Analyse Swing":
             # -------------------------
 
             if swing_report_path.exists():
-                
+
                 st.divider()
 
                 st.subheader("🎥 Recommended Drill")
