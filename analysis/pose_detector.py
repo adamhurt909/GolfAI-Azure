@@ -3,6 +3,7 @@ import mediapipe as mp
 import math
 import json
 import sys
+from pathlib import Path
 
 with open(
     "data/phase_report.json",
@@ -708,10 +709,27 @@ print("")
 print("STRUCTURED REPORT")
 print(swing_report)
 
-output_path = r"data\swing_report.json"
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-with open(output_path, "w") as file:
-    json.dump(swing_report, file, indent=4)
+output_path = (
+    BASE_DIR
+    / "data"
+    / "swing_report.json"
+)
+
+with open(
+    output_path,
+    "w",
+    encoding="utf-8"
+) as file:
+
+    json.dump(
+        swing_report,
+        file,
+        indent=4
+    )
 
 print("")
-print(f"Report saved to: {output_path}")
+print(
+    f"Report saved to: {output_path}"
+)
