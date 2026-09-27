@@ -709,6 +709,12 @@ swing_report = {
 }
 
 print("")
+print(
+    f"POSE DETECTOR RUNTIME: "
+    f"{time.time() - start_time:.2f} seconds"
+)
+
+print("")
 print("STRUCTURED REPORT")
 print(swing_report)
 
@@ -735,10 +741,4 @@ with open(
 print("")
 print(
     f"Report saved to: {output_path}"
-)
-
-print("")
-print(
-    f"POSE DETECTOR RUNTIME: "
-    f"{time.time() - start_time:.2f} seconds"
 )
