@@ -1,12 +1,15 @@
 import csv
 import json
 import sys
+import time
 from pathlib import Path
 
 import cv2
 import mediapipe as mp
 import numpy as np
 import matplotlib.pyplot as plt
+
+start_time = time.time()
 
 
 # -------------------------
@@ -1067,3 +1070,9 @@ if SHOW_DEBUG_WINDOWS:
 
     plt.tight_layout()
     plt.show()
+
+print("")
+print(
+    f"PHASE DETECTOR RUNTIME: "
+    f"{time.time() - start_time:.2f} seconds"
+)

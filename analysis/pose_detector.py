@@ -3,7 +3,10 @@ import mediapipe as mp
 import math
 import json
 import sys
+import time
 from pathlib import Path
+
+start_time = time.time()
 
 with open(
     "data/phase_report.json",
@@ -732,4 +735,10 @@ with open(
 print("")
 print(
     f"Report saved to: {output_path}"
+)
+
+print("")
+print(
+    f"POSE DETECTOR RUNTIME: "
+    f"{time.time() - start_time:.2f} seconds"
 )

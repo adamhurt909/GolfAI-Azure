@@ -446,21 +446,24 @@ if page == "Analyse Swing":
             **Head Movement**
             🎯 Target: As close to 0 as possible
 
-            Measures head stability between Address and Impact.
+            Measures how much the head position changes between Address and Impact.
+            Excessive movement can affect strike consistency.
 
             ---
 
             **Lead Arm Angle**
-            🎯 Target: 130°-170°
+            🎯 Target: Maintain a relatively straight lead arm - 130°-170°
 
-            Measures width and extension at the top of the backswing.
+            Measures the extension of the lead arm at the top of the backswing.
+            More extension generally promotes width and arc.
 
             ---
 
             **Trail Arm Angle**
-            🎯 Target: 70°-100°
+            🎯 Target: Maintain a comfortable bend - 70°-100°
 
-            Measures trail arm leverage and compactness.
+            Measures how folded the trail arm is at the top of the backswing.
+            Appropriate bend can improve structure and leverage.
 
             ---
 
@@ -468,34 +471,39 @@ if page == "Analyse Swing":
             🎯 Target: Approximately 3:1
 
             Measures backswing speed compared to downswing speed.
+            Backswing ≈ 3 times longer than downswing.
 
             ---
 
             **Swing Width**
-            🎯 Target: Maintain width in the backswing.
+            🎯 Target: Maintain width throughout the backswing
 
-            Measures the width of the swing arc.
+            Measures the distance between the trail shoulder and trail wrist at the top of the swing.
+            Greater width generally promotes a larger swing arc and improved power potential.
 
             ---
 
-            **Hip Sway**
+            **Hip Movement**
             🎯 Target: Minimise lateral hip movement.
 
-            Measures sideways hip movement during the backswing.
+            Measures sideways hip movement between Address and Top of Backswing.
+            Lower values generally indicate better control of lateral movement.
 
             ---
 
             **Spine Angle Change**
             🎯 Target: As close to 0° as possible.
 
-            Measures posture retention through impact.
+            Measures how much spine angle changes between Address and Impact.
+            Smaller changes indicate better posture retention throughout the swing.
 
             ---
 
             **Finish Stability**
             🎯 Target: Hold a stable finish position.
 
-            Measures how stable the finish remains after the swing.
+            Measures movement in the body immediately after the finish position is reached.
+            Lower values indicate a more balanced and stable finish.
             """
             )
 
@@ -631,10 +639,6 @@ if page == "Analyse Swing":
                 errors="replace"
             )
 
-#              with st.expander("Pose detector output"):
-#                  if pose_result.stdout:
-#                     st.text(pose_result.stdout)
-
             with st.expander("Pose detector output"):
 
                 if pose_result.stdout:
@@ -651,18 +655,12 @@ if page == "Analyse Swing":
                     st.text(cleaned_output)
 
                 if pose_result.stderr:
-                    st.error(pose_result.stderr)
 
-            st.write("Swing report path:")
-            st.write(swing_report_path)
+                    if "Traceback" in pose_result.stderr:
 
-            st.write("Swing report exists:")
-            st.write(swing_report_path.exists())
-
-            st.write("Data directory contents:")
-
-            for item in DATA_DIR.iterdir():
-                st.write(item.name)
+                        st.error(
+                            pose_result.stderr
+                        )
 
             # -------------------------
             # Swing Metrics

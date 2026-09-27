@@ -1,6 +1,9 @@
 import sys
+import time
 from pathlib import Path
 import json
+
+start_time = time.time()
 
 sys.path.append(
     str(Path(__file__).resolve().parent.parent)
@@ -209,3 +212,9 @@ with open(
 ) as f:
 
     f.write(offline_text)
+
+print("")
+print(
+    f"AI COACH RUNTIME: "
+    f"{time.time() - start_time:.2f} seconds"
+)
