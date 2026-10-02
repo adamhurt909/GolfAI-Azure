@@ -1280,6 +1280,11 @@ if page == "Analyse Swing":
             st.write("Swing report path:")
             st.write(str(swing_report_path))
 
+            import os
+
+            st.write("Current working directory:")
+            st.write(os.getcwd())
+
             st.info("Generating coaching feedback...")
 
             coach_result = subprocess.run(

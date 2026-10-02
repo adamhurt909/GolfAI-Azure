@@ -4,8 +4,20 @@ import math
 import json
 import sys
 
+from pathlib import Path
+
+BASE_DIR = (
+    Path(__file__).resolve().parent.parent
+)
+
+PHASE_REPORT = (
+    BASE_DIR
+    / "data"
+    / "phase_report.json"
+)
+
 with open(
-    "data/phase_report.json",
+    PHASE_REPORT,
     "r"
 ) as f:
 
@@ -28,7 +40,7 @@ print("")
 if len(sys.argv) > 1:
     video_path = sys.argv[1]
 else:
-    video_path = r"videos\Adam_27thJune_26.mp4"
+    video_path = "videos/Adam_27thJune_26.mp4"
 
 
 
@@ -702,10 +714,31 @@ print("")
 print("STRUCTURED REPORT")
 print(swing_report)
 
-output_path = r"data\swing_report.json"
+from pathlib import Path
+
+BASE_DIR = (
+    Path(__file__).resolve().parent.parent
+)
+
+output_path = (
+    BASE_DIR
+    / "data"
+    / "swing_report.json"
+)
+
+import os
 
 with open(output_path, "w") as file:
-    json.dump(swing_report, file, indent=4)
+    json.dump(
+        swing_report,
+        file,
+        indent=4
+    )
 
 print("")
-print(f"Report saved to: {output_path}")
+print("SWING REPORT SAVED")
+print("------------------")
+print("cwd:", os.getcwd())
+print("file:", output_path)
+print("exists:", output_path.exists())
+print("")
