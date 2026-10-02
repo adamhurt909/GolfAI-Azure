@@ -707,6 +707,11 @@ if page == "Analyse Swing":
             swing_report_path = DATA_DIR / "swing_report.json"
             coach_report_path = DATA_DIR / "coach_report.txt"
 
+            coaching_overlay_path = (
+                report_folder
+                / "coaching_overlay.mp4"
+            )
+
             address_image_path = DATA_DIR / "address.jpg"
             top_image_path = DATA_DIR / "top.jpg"
             impact_image_path = DATA_DIR / "impact.jpg"
@@ -1353,7 +1358,130 @@ if page == "Analyse Swing":
                 st.warning(
                     "The AI coaching report could not be found."
                 )
+                
+            # -------------------------
+            # Corrected-Pose Coaching Video
+            # -------------------------
 
+            st.divider()
+
+            st.subheader(
+                "🎯 Suggested Swing Position"
+            )
+
+            st.write(
+                "GolfAI can create a coaching overlay showing "
+                "your detected lead-arm position in red and a "
+                "suggested target position in green."
+            )
+
+            st.caption(
+                "This is a visual coaching guide. "
+                "It does not alter the golfer's real body "
+                "or claim to show an actual performed swing."
+            )
+
+            if lead_arm < 145:
+
+                st.warning(
+                    f"Lead arm angle at Top: "
+                    f"{lead_arm:.1f}°. "
+                    f"GolfAI target: 145°-160°."
+                )
+
+            else:
+
+                st.success(
+                    f"Lead arm angle at Top: "
+                    f"{lead_arm:.1f}°. "
+                    f"This is already within GolfAI's target range."
+                )
+
+
+            generate_overlay_button = st.button(
+                "🎬 Generate Suggested-Pose Video",
+                key=f"generate_overlay_{video_name}"
+            )
+
+
+            if generate_overlay_button:
+
+                st.info(
+                    "Generating suggested-pose coaching video..."
+                )
+
+                overlay_result = subprocess.run(
+                    [
+                        PYTHON_EXE,
+                        str(
+                            ANALYSIS_DIR
+                            / "coaching_overlay.py"
+                        ),
+                        str(video_path),
+                        str(coaching_overlay_path)
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace"
+                )
+
+                with st.expander(
+                    "Coaching overlay output"
+                ):
+
+                    if overlay_result.stdout:
+
+                        st.text(
+                            overlay_result.stdout
+                        )
+
+                    if overlay_result.stderr:
+
+                        st.text(
+                            overlay_result.stderr
+                        )
+
+                if (
+                    overlay_result.returncode == 0
+                    and coaching_overlay_path.exists()
+                    and coaching_overlay_path.stat().st_size > 0
+                ):
+
+                    st.success(
+                        "Suggested-pose video created."
+                    )
+
+                else:
+
+                    st.error(
+                        "The suggested-pose video could not "
+                        "be created. Check the coaching overlay "
+                        "output above."
+                    )
+
+
+            if coaching_overlay_path.exists():
+
+                st.video(
+                    str(coaching_overlay_path)
+                )
+
+                with open(
+                    coaching_overlay_path,
+                    "rb"
+                ) as overlay_file:
+
+                    st.download_button(
+                        label="⬇️ Download Suggested-Pose Video",
+                        data=overlay_file.read(),
+                        file_name=(
+                            f"{video_name}"
+                            f"_suggested_pose.mp4"
+                        ),
+                        mime="video/mp4",
+                        key=f"download_overlay_{video_name}"
+                    )
 
             # -------------------------
             # Recommended Drill
