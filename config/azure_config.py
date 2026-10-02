@@ -15,16 +15,16 @@ AZURE_OPENAI_DEPLOYMENT = os.getenv(
 
 
 if not AZURE_OPENAI_ENDPOINT:
-    raise RuntimeError(
-        "AZURE_OPENAI_ENDPOINT is not configured."
+    print(
+        "WARNING: AZURE_OPENAI_ENDPOINT not configured."
     )
 
 if not AZURE_OPENAI_KEY:
-    raise RuntimeError(
-        "AZURE_OPENAI_KEY is not configured."
+    print(
+        "WARNING: AZURE_OPENAI_KEY not configured."
     )
 
 if not AZURE_OPENAI_DEPLOYMENT:
-    raise RuntimeError(
-        "AZURE_OPENAI_DEPLOYMENT is not configured."
+    print(
+        "WARNING: AZURE_OPENAI_DEPLOYMENT not configured."
     )

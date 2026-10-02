@@ -1,15 +1,12 @@
 import csv
 import json
 import sys
-import time
 from pathlib import Path
 
 import cv2
 import mediapipe as mp
 import numpy as np
 import matplotlib.pyplot as plt
-
-start_time = time.time()
 
 
 # -------------------------
@@ -274,8 +271,6 @@ frames = []
 hand_x = []
 hand_y = []
 
-landmarks_by_frame = []
-
 with mp_pose.Pose(
     static_image_mode=False,
     min_detection_confidence=0.5,
@@ -292,13 +287,8 @@ with mp_pose.Pose(
             frame.copy()
         )
 
-        frame_small = cv2.resize(
-            frame,
-            (480, 270)
-        )
-
         rgb_frame = cv2.cvtColor(
-            frame_small,
+            frame,
             cv2.COLOR_BGR2RGB
         )
 
@@ -339,10 +329,6 @@ with mp_pose.Pose(
                 average_y
             )
 
-            landmarks_by_frame.append(
-                results.pose_landmarks.landmark
-            )
-
         else:
             hand_x.append(
                 np.nan
@@ -350,10 +336,6 @@ with mp_pose.Pose(
 
             hand_y.append(
                 np.nan
-            )
-
-            landmarks_by_frame.append(
-                None
             )
 
 
@@ -666,11 +648,18 @@ impact_hand_y = hand_y_smooth[
 
 if len(impact_hand_y) > 0:
 
-    # Maximum Y is the lowest hand position on screen.
-    impact_frame = (
+#    # Maximum Y is the lowest hand position on screen.
+#    impact_frame = (
+#        impact_search_start
+#        + int(np.argmax(impact_hand_y))
+#    )
+
+    impact_frame = min(
+        total_frames - 1,
         impact_search_start
         + int(np.argmax(impact_hand_y))
-    )
+        + 1
+    ) #Could potentially make this +2 as impact might be more accurate
 
 else:
 
@@ -782,46 +771,6 @@ finish_frame = min(
 # -------------------------
 # Results
 # -------------------------
-
-landmarks_path = (
-    output_dir
-    / "landmarks.json"
-)
-
-serializable_landmarks = []
-
-for landmarks in landmarks_by_frame:
-
-    if landmarks is None:
-
-        serializable_landmarks.append(
-            None
-        )
-
-    else:
-
-        serializable_landmarks.append(
-            [
-                {
-                    "x": point.x,
-                    "y": point.y,
-                    "z": point.z,
-                    "visibility": point.visibility
-                }
-                for point in landmarks
-            ]
-        )
-
-with open(
-    landmarks_path,
-    "w",
-    encoding="utf-8"
-) as f:
-
-    json.dump(
-        serializable_landmarks,
-        f
-    )
 
 phase_report = {
     "video": video_path.name,
@@ -1125,9 +1074,3 @@ if SHOW_DEBUG_WINDOWS:
 
     plt.tight_layout()
     plt.show()
-
-print("")
-print(
-    f"PHASE DETECTOR RUNTIME: "
-    f"{time.time() - start_time:.2f} seconds"
-)

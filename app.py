@@ -23,7 +23,7 @@ st.write(
     "calculate movement metrics, and generate AI coaching feedback."
 )
 
-st.caption("GolfAI Container Version 2: 21-Sept-2026")
+st.caption("GolfAI Container Version 3: 02-Oct-2026")
 
 page = st.sidebar.radio(
     "Navigation",
@@ -51,6 +51,170 @@ def score_metric(
 
     else:
         return 40, "🔴 Needs Work"
+
+def rating_from_score(score):
+
+    if score >= 90:
+        return "🟢 Excellent"
+
+    elif score >= 70:
+        return "🟡 Good"
+
+    else:
+        return "🔴 Needs Work"
+
+
+def score_lower_is_better(
+    value,
+    excellent_limit,
+    good_limit,
+    poor_limit
+):
+
+    if value <= excellent_limit:
+
+        score = 100
+
+    elif value <= good_limit:
+
+        score = round(
+            100
+            - (
+                (value - excellent_limit)
+                / (good_limit - excellent_limit)
+            )
+            * 30
+        )
+
+    elif value <= poor_limit:
+
+        score = round(
+            70
+            - (
+                (value - good_limit)
+                / (poor_limit - good_limit)
+            )
+            * 70
+        )
+
+    else:
+
+        score = 0
+
+    return (
+        score,
+        rating_from_score(score)
+    )
+
+def score_target_range(
+    value,
+    ideal_min,
+    ideal_max,
+    acceptable_min,
+    acceptable_max
+):
+
+    if ideal_min <= value <= ideal_max:
+
+        score = 100
+
+    elif acceptable_min <= value <= acceptable_max:
+
+        if value < ideal_min:
+
+            score = round(
+                70
+                + (
+                    (value - acceptable_min)
+                    / (ideal_min - acceptable_min)
+                )
+                * 30
+            )
+
+        else:
+
+            score = round(
+                100
+                - (
+                    (value - ideal_max)
+                    / (acceptable_max - ideal_max)
+                )
+                * 30
+            )
+
+    else:
+
+        if value < acceptable_min:
+
+            score = max(
+                0,
+                round(
+                    70
+                    * value
+                    / acceptable_min
+                )
+            )
+
+        else:
+
+            score = max(
+                0,
+                round(
+                    70
+                    - (
+                        (
+                            value - acceptable_max
+                        )
+                        * 2
+                    )
+                )
+            )
+
+    return (
+        score,
+        rating_from_score(score)
+    )
+
+def score_higher_is_better(
+    value,
+    excellent,
+    good,
+    poor
+):
+
+    if value >= excellent:
+
+        score = 100
+
+    elif value >= good:
+
+        score = round(
+            70
+            + (
+                (value - good)
+                / (excellent - good)
+            )
+            * 30
+        )
+
+    elif value >= poor:
+
+        score = round(
+            (
+                (value - poor)
+                / (good - poor)
+            )
+            * 70
+        )
+
+    else:
+
+        score = 0
+
+    return (
+        score,
+        rating_from_score(score)
+    )
 
 def score_bar(score):
 
@@ -98,16 +262,16 @@ def score_bar(score):
 METRIC_TARGETS = {
 
     "Head Movement":
-        "🎯 Target: As close to 0 as possible",
+        "🎯 Target: As close to 0 as possible, ≤ 0.02 is excellent",
 
     "Lead Arm Angle":
-        "🎯 Target: 130°-170°. A wider lead arm helps create width and power.",
+        "🎯 Target: 145°-160°. A wider lead arm helps create width and power.",
 
     "Trail Arm Angle":
-        "🎯 Target: 70°-100°. A folded trail arm creates leverage at the top.",
+        "🎯 Target: 80°-90°. A folded trail arm creates leverage at the top.",
 
     "Spine Angle Change":
-        "🎯 Target: As close to 0° as possible. Maintaining posture improves consistency.",
+        "🎯 Target: As close to 0° as possible, ≤ 8 is excellent.",
 
     "Tempo Ratio":
         "🎯 Target: Approximately 3:1",
@@ -444,7 +608,7 @@ if page == "Analyse Swing":
             ---
 
             **Head Movement**
-            🎯 Target: As close to 0 as possible
+            🎯 Target: As close to 0 as possible, ≤ 0.02 is excellent
 
             Measures how much the head position changes between Address and Impact.
             Excessive movement can affect strike consistency.
@@ -476,15 +640,15 @@ if page == "Analyse Swing":
             ---
 
             **Swing Width**
-            🎯 Target: Maintain width throughout the backswing
+            🎯 Target: Maintain width throughout the backswing, Excellent ≥ 0.08
 
-            Measures the distance between the trail shoulder and trail wrist at the top of the swing.
-            Greater width generally promotes a larger swing arc and improved power potential.
+            Measures the distance between the trail shoulder and trail wrist at the top of the backswing.
+            Greater distance generally indicates more arm extension and a wider swing arc.
 
             ---
 
             **Hip Movement**
-            🎯 Target: Minimise lateral hip movement.
+            🎯 Target: Minimise lateral hip movement, Excellent ≤ 0.15
 
             Measures sideways hip movement between Address and Top of Backswing.
             Lower values generally indicate better control of lateral movement.
@@ -492,7 +656,7 @@ if page == "Analyse Swing":
             ---
 
             **Spine Angle Change**
-            🎯 Target: As close to 0° as possible.
+            🎯 Target: As close to 0° as possible, ≤ 8 is excellent
 
             Measures how much spine angle changes between Address and Impact.
             Smaller changes indicate better posture retention throughout the swing.
@@ -677,8 +841,6 @@ if page == "Analyse Swing":
 
                 metrics = swing_report["metrics"]
 
-                st.write(metrics)
-
                 tempo_ratio = metrics[
                     "tempo_ratio"
                 ]
@@ -718,167 +880,117 @@ if page == "Analyse Swing":
                 # Lower is better
                 # -------------------------
 
-                if head_move <= 0.02:
-                    head_score = 100
-                    head_rating = "🟢 Excellent"
-
-                elif head_move <= 0.05:
-                    head_score = 70
-                    head_rating = "🟡 Good"
-
-                else:
-                    head_score = 40
-                    head_rating = "🔴 Needs Work"
+                head_score, head_rating = (
+                    score_lower_is_better(
+                        head_move,
+                        excellent_limit=0.02,
+                        good_limit=0.05,
+                        poor_limit=0.10
+                    )
+                )
 
                 # -------------------------
                 # Lead Arm Angle Score
                 # Higher/wider is generally better
                 # -------------------------
 
-                if 130 <= lead_arm <= 170:
-                    lead_arm_score = 100
-                    lead_arm_rating = "🟢 Excellent"
-
-                elif 120 <= lead_arm <= 180:
-                    lead_arm_score = 70
-                    lead_arm_rating = "🟡 Good"
-
-                else:       
-                    lead_arm_score = 40
-                    lead_arm_rating = "🔴 Needs Work"
+                lead_arm_score, lead_arm_rating = (
+                    score_target_range(
+                        lead_arm,
+                        ideal_min=145,
+                        ideal_max=160,
+                        acceptable_min=130,
+                        acceptable_max=170
+                    )
+                )
 
                 # -------------------------
                 # Trail Arm Angle Score
-                # Ideal range is around 70°-100°
+                # Ideal range is around 80°-80°
                 # -------------------------
 
-                if 70 <= trail_arm <= 100:
-                    trail_arm_score = 100
-                    trail_arm_rating = "🟢 Excellent"
-
-                elif 60 <= trail_arm <= 110:
-                    trail_arm_score = 70
-                    trail_arm_rating = "🟡 Good"
-
-                else:
-                    trail_arm_score = 40
-                    trail_arm_rating = "🔴 Needs Work"
+                trail_arm_score, trail_arm_rating = (
+                    score_target_range(
+                        trail_arm,
+                        ideal_min=80,
+                        ideal_max=90,
+                        acceptable_min=70,
+                        acceptable_max=100
+                    )
+                )
 
                 # -------------------------
                 # Spine Angle Change Score
                 # Lower is better
                 # -------------------------
 
-                if spine_change <= 5:
-                    spine_score = 100
-                    spine_rating = "🟢 Excellent"
-
-                elif spine_change <= 10:
-                    spine_score = 70
-                    spine_rating = "🟡 Good"
-
-                else:
-                    spine_score = 40
-                    spine_rating = "🔴 Needs Work"
+                spine_score, spine_rating = (
+                    score_lower_is_better(
+                        spine_change,
+                        excellent_limit=8,
+                        good_limit=14,
+                        poor_limit=20
+                    )
+                )
 
                 # -------------------------
                 # Tempo Score
                 # -------------------------
 
-                if 2.7 <= tempo_ratio <= 3.3:
-
-                    tempo_score = 100
-                    tempo_rating = "🟢 Excellent"
-
-                elif 2.4 <= tempo_ratio <= 3.6:
-
-                    tempo_score = 70
-                    tempo_rating = "🟡 Good"
-
-                else:
-
-                    tempo_score = 40
-                    tempo_rating = "🔴 Needs Work"
+                tempo_score, tempo_rating = (
+                    score_target_range(
+                        tempo_ratio,
+                        ideal_min=2.8,
+                        ideal_max=3.2,
+                        acceptable_min=2.5,
+                        acceptable_max=3.5
+                    )
+                )
 
                 # -------------------------
                 # Swing Width Score
                 # -------------------------
 
-                if swing_width >= 0.18:
-
-                    width_score = 100
-                    width_rating = "🟢 Excellent"
-
-                elif swing_width >= 0.15:
-
-                    width_score = 70
-                    width_rating = "🟡 Good"
-
-                else:
-
-                    width_score = 40
-                    width_rating = "🔴 Needs Work"
+                width_score, width_rating = (
+                    score_higher_is_better(
+                        swing_width,
+                        excellent=0.08,
+                        good=0.06,
+                        poor=0.03
+                    )
+                )
 
                 # -------------------------
                 # Hip Sway Score
                 # Lower is better
                 # -------------------------
 
-                if hip_sway <= 0.02:
-
-                    hip_sway_score = 100
-                    hip_sway_rating = "🟢 Excellent"
-
-                elif hip_sway <= 0.04:
-
-                    hip_sway_score = 70
-                    hip_sway_rating = "🟡 Good"
-
-                else:
-
-                    hip_sway_score = 40
-                    hip_sway_rating = "🔴 Needs Work"
+                hip_sway_score, hip_sway_rating = (
+                    score_lower_is_better(
+                        hip_sway,
+                        excellent_limit=0.015,
+                        good_limit=0.03,
+                        poor_limit=0.06
+                    )
+                )
 
                 # -------------------------
                 # Finish Stability Score
                 # Lower is better
                 # -------------------------
 
-                if finish_stability <= 0.01:
-
-                    finish_stability_score = 100
-                    finish_stability_rating = "🟢 Excellent"
-
-                elif finish_stability <= 0.025:
-
-                    finish_stability_score = 70
-                    finish_stability_rating = "🟡 Good"
-
-                else:
-
-                    finish_stability_score = 40
-                    finish_stability_rating = "🔴 Needs Work"
+                finish_stability_score, finish_stability_rating = (
+                    score_lower_is_better(
+                        finish_stability,
+                        excellent_limit=0.01,
+                        good_limit=0.025,
+                        poor_limit=0.05
+                    )
+                )
 
                 # -------------------------
                 # Overall Swing Score
                 # -------------------------
-
-                st.write(
-                    "DEBUG SCORES"
-                )
-
-                st.write(
-                    {
-                        "head": head_score,
-                        "lead": lead_arm_score,
-                        "trail": trail_arm_score,
-                        "spine": spine_score,
-                        "tempo": tempo_score,
-                        "width": width_score,
-                        "hip": hip_sway_score,
-                        "finish": finish_stability_score
-                    }
-                )
 
                 overall_score = round(
                     (
@@ -1009,7 +1121,7 @@ if page == "Analyse Swing":
                         )
 
                         st.caption(
-                            "🎯 Target: As close to 0 as possible"
+                            "🎯 Target: As close to 0 as possible, ≤ 0.02 is excellent"
                         )
 
                         score_bar(head_score)
@@ -1029,7 +1141,7 @@ if page == "Analyse Swing":
                         )
 
                         st.caption(
-                            "🎯 Target: 70°-100°"
+                            "🎯 Target: 80°-90°"
                         )
 
                         score_bar(trail_arm_score)
@@ -1069,7 +1181,7 @@ if page == "Analyse Swing":
                         )
 
                         st.caption(
-                            "🎯 Target: Excellent ≤ 0.02 | Good ≤ 0.04"
+                            "🎯 Target: Excellent ≤ 0.15"
                         )
 
                         score_bar(hip_sway_score)
@@ -1088,7 +1200,7 @@ if page == "Analyse Swing":
                         )
 
                         st.caption(
-                            "🎯 Target: 130°-170°"
+                            "🎯 Target: 145°-160°"
                         )
 
                         score_bar(lead_arm_score)
@@ -1108,7 +1220,7 @@ if page == "Analyse Swing":
                         )
 
                         st.caption(
-                            "🎯 Target: As close to 0° as possible"
+                            "🎯 Target: As close to 0° as possible, ≤ 8 is excellent"
                         )
 
                         score_bar(spine_score)
@@ -1128,7 +1240,7 @@ if page == "Analyse Swing":
                         )
 
                         st.caption(
-                            "🎯 Target: ≥ 0.18"
+                            "🎯 Target: Excellent ≥ 0.08"
                         )
 
                         score_bar(width_score)
@@ -1148,7 +1260,7 @@ if page == "Analyse Swing":
                         )
 
                         st.caption(
-                            "🎯 Target: Excellent ≤ 0.01 | Good ≤ 0.025"
+                            "🎯 Target: Excellent ≤ 0.01"
                         )
 
                         score_bar(finish_stability_score)
@@ -1540,9 +1652,9 @@ if (
                 metrics["spine_angle_change_degrees"]
             )
 
-            if spine <= 5:
+            if spine <= 8:
                 score += 100
-            elif spine <= 10:
+            elif spine <= 14:
                 score += 70
             else:
                 score += 40
@@ -1565,10 +1677,10 @@ if (
 
             width = metrics["swing_width"]
 
-            if width >= 0.18:
+            if width >= 0.06:
                 score += 100
 
-            elif width >= 0.15:
+            elif width >= 0.04:
                 score += 70
 
             else:
