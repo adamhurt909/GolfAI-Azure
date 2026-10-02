@@ -92,8 +92,18 @@ print("")
 
 # Load swing report
 
+BASE_DIR = (
+    Path(__file__).resolve().parent.parent
+)
+
+SWING_REPORT = (
+    BASE_DIR
+    / "data"
+    / "swing_report.json"
+)
+
 with open(
-    "data/swing_report.json",
+    SWING_REPORT,
     "r"
 ) as f:
 
@@ -209,8 +219,14 @@ try:
 
     print("WRITING NEW COACH REPORT")
 
+    COACH_REPORT = (
+        BASE_DIR
+        / "data"
+        / "coach_report.txt"
+    )
+
     with open(
-        "data/coach_report.txt",
+        COACH_REPORT,
         "w",
         encoding="utf-8"
     ) as f:
@@ -293,8 +309,14 @@ except Exception as e:
 
     print("WRITING OFFLINE COACH REPORT")
 
+    COACH_REPORT = (
+        BASE_DIR
+        / "data"
+        / "coach_report.txt"
+    )
+
     with open(
-        "data/coach_report.txt",
+        COACH_REPORT,
         "w",
         encoding="utf-8"
     ) as f:
