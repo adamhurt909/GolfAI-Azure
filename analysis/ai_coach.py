@@ -179,12 +179,24 @@ Swing metrics:
 
 Provide:
 
-1. Overall assessment
-2. Strengths
-3. Improvement opportunities
-4. One recommended practice drill
+1. Overall assessment (2-3 detailed paragraphs)
 
-Keep commentary concise and aligned with the GolfAI scoring system.
+2. Strengths
+Explain why each strength is beneficial to the golf swing.
+
+3. Improvement opportunities
+Explain how each weakness may affect consistency, power or ball striking.
+
+4. Practice plan
+Recommend one specific drill and explain exactly how it should be performed.
+
+5. Key focus for the next practice session
+
+Use the GolfAI target ranges when assessing metrics.
+
+Write like an experienced PGA coach speaking directly to the golfer.
+
+Provide meaningful coaching detail rather than short bullet-point summaries.
 """
 
 try:

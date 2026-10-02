@@ -1274,17 +1274,6 @@ if page == "Analyse Swing":
             # Run AI coach
             # -------------------------
 
-            st.write("Swing report exists:")
-            st.write(swing_report_path.exists())
-
-            st.write("Swing report path:")
-            st.write(str(swing_report_path))
-
-            import os
-
-            st.write("Current working directory:")
-            st.write(os.getcwd())
-
             st.info("Generating coaching feedback...")
 
             coach_result = subprocess.run(
