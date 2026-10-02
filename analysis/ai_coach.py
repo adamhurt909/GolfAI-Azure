@@ -102,6 +102,10 @@ SWING_REPORT = (
     / "swing_report.json"
 )
 
+print("BASE_DIR:", BASE_DIR)
+print("SWING_REPORT:", SWING_REPORT)
+print("FILE EXISTS:", SWING_REPORT.exists())
+
 with open(
     SWING_REPORT,
     "r"
