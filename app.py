@@ -677,6 +677,8 @@ if page == "Analyse Swing":
 
                 metrics = swing_report["metrics"]
 
+                st.write(metrics)
+
                 tempo_ratio = metrics[
                     "tempo_ratio"
                 ]
@@ -860,6 +862,23 @@ if page == "Analyse Swing":
                 # -------------------------
                 # Overall Swing Score
                 # -------------------------
+
+                st.write(
+                    "DEBUG SCORES"
+                )
+
+                st.write(
+                    {
+                        "head": head_score,
+                        "lead": lead_arm_score,
+                        "trail": trail_arm_score,
+                        "spine": spine_score,
+                        "tempo": tempo_score,
+                        "width": width_score,
+                        "hip": hip_sway_score,
+                        "finish": finish_stability_score
+                    }
+                )
 
                 overall_score = round(
                     (

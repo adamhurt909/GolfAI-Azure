@@ -54,51 +54,116 @@ print("")
 
 mp_pose = mp.solutions.pose
 
-landmarks_by_frame = []
+with open(
+    "data/landmarks.json",
+    "r"
+) as f:
 
-def angle_between_three_points(point_a, point_b, point_c):
-    """
-    Calculates the angle at point_b formed by:
-    point_a -> point_b -> point_c
-    """
+    landmarks_data = json.load(f)
+
+landmarks_by_frame = landmarks_data
+
+def angle_between_three_points(
+    point_a,
+    point_b,
+    point_c
+):
 
     a = (point_a.x, point_a.y)
     b = (point_b.x, point_b.y)
     c = (point_c.x, point_c.y)
 
-    ba = (a[0] - b[0], a[1] - b[1])
-    bc = (c[0] - b[0], c[1] - b[1])
-
-    dot_product = ba[0] * bc[0] + ba[1] * bc[1]
-
-    magnitude_ba = math.sqrt(ba[0] ** 2 + ba[1] ** 2)
-    magnitude_bc = math.sqrt(bc[0] ** 2 + bc[1] ** 2)
-
-    if magnitude_ba == 0 or magnitude_bc == 0:
-        return 0
-
-    cosine_angle = dot_product / (magnitude_ba * magnitude_bc)
-
-    cosine_angle = max(min(cosine_angle, 1), -1)
-
-    angle = math.degrees(math.acos(cosine_angle))
-
-    return angle
-
-def distance_between_points(point_a, point_b):
-    return math.sqrt(
-        (point_a.x - point_b.x) ** 2
-        +
-        (point_a.y - point_b.y) ** 2
+    ba = (
+        a[0] - b[0],
+        a[1] - b[1]
     )
 
-def midpoint(point_a, point_b):
+    bc = (
+        c[0] - b[0],
+        c[1] - b[1]
+    )
+
+    dot_product = (
+        ba[0] * bc[0]
+        + ba[1] * bc[1]
+    )
+
+    magnitude_ba = math.sqrt(
+        ba[0] ** 2
+        + ba[1] ** 2
+    )
+
+    magnitude_bc = math.sqrt(
+        bc[0] ** 2
+        + bc[1] ** 2
+    )
+
+    if (
+        magnitude_ba == 0
+        or magnitude_bc == 0
+    ):
+        return 0
+
+    cosine_angle = (
+        dot_product
+        / (
+            magnitude_ba
+            * magnitude_bc
+        )
+    )
+
+    cosine_angle = max(
+        min(cosine_angle, 1),
+        -1
+    )
+
+    return math.degrees(
+        math.acos(
+            cosine_angle
+        )
+    )
+
+
+def distance_between_points(
+    point_a,
+    point_b
+):
+
+    return math.sqrt(
+        (
+            point_a.x
+            - point_b.x
+        ) ** 2
+        +
+        (
+            point_a.y
+            - point_b.y
+        ) ** 2
+    )
+
+
+def midpoint(
+    point_a,
+    point_b
+):
+
     return {
-        "x": (point_a.x + point_b.x) / 2,
-        "y": (point_a.y + point_b.y) / 2
+        "x": (
+            point_a.x
+            + point_b.x
+        ) / 2,
+        "y": (
+            point_a.y
+            + point_b.y
+        ) / 2
     }
 
-def dictionary_distance(point_a, point_b):
+
+def dictionary_distance(
+    point_a,
+    point_b
+):
+
     return math.sqrt(
         (
             point_a["x"]
@@ -111,9 +176,21 @@ def dictionary_distance(point_a, point_b):
         ) ** 2
     )
 
-def line_angle(point_a, point_b):
-    dx = point_b["x"] - point_a["x"]
-    dy = point_b["y"] - point_a["y"]
+
+def line_angle(
+    point_a,
+    point_b
+):
+
+    dx = (
+        point_b["x"]
+        - point_a["x"]
+    )
+
+    dy = (
+        point_b["y"]
+        - point_a["y"]
+    )
 
     return math.degrees(
         math.atan2(
@@ -122,20 +199,16 @@ def line_angle(point_a, point_b):
         )
     )
 
-def landmark_line_angle(
-    point_a,
-    point_b
+
+def angle_difference(
+    angle_1,
+    angle_2
 ):
 
-    dx = point_b.x - point_a.x
-    dy = point_b.y - point_a.y
-
-    return math.degrees(
-        math.atan2(dy, dx)
+    difference = (
+        angle_2
+        - angle_1
     )
-
-def angle_difference(angle_1, angle_2):
-    difference = angle_2 - angle_1
 
     while difference > 180:
         difference -= 360
@@ -143,31 +216,9 @@ def angle_difference(angle_1, angle_2):
     while difference < -180:
         difference += 360
 
-    return abs(difference)
-
-with mp_pose.Pose(
-    static_image_mode=False,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-) as pose:
-
-    while cap.isOpened():
-
-        success, frame = cap.read()
-
-        if not success:
-            break
-
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        results = pose.process(rgb_frame)
-
-        if results.pose_landmarks:
-            landmarks_by_frame.append(results.pose_landmarks.landmark)
-        else:
-            landmarks_by_frame.append(None)
-
-cap.release()
+    return abs(
+        difference
+    )
 
 def get_landmarks(frame_number):
 
@@ -200,51 +251,57 @@ def get_landmarks(frame_number):
             f"frame {frame_number}"
         )
 
-    return landmarks
+    converted_landmarks = []
+
+    for point in landmarks:
+
+        class Landmark:
+            pass
+
+        landmark = Landmark()
+
+        landmark.x = point["x"]
+        landmark.y = point["y"]
+        landmark.z = point["z"]
+        landmark.visibility = point["visibility"]
+
+        converted_landmarks.append(
+            landmark
+        )
+
+    return converted_landmarks
 
 def get_nearest_landmarks(
     frame_number,
     maximum_offset=10
 ):
+
     frame_number = min(
         len(landmarks_by_frame) - 1,
-        max(
-            0,
-            frame_number
-        )
+        max(0, frame_number)
     )
 
-    if landmarks_by_frame[frame_number] is not None:
-        return (
-            landmarks_by_frame[frame_number],
-            frame_number
-        )
-
     for offset in range(
-        1,
+        0,
         maximum_offset + 1
     ):
-        later_frame = frame_number + offset
 
-        if (
-            later_frame < len(landmarks_by_frame)
-            and landmarks_by_frame[later_frame] is not None
-        ):
-            return (
-                landmarks_by_frame[later_frame],
-                later_frame
-            )
+        for test_frame in [
+            frame_number + offset,
+            frame_number - offset
+        ]:
 
-        earlier_frame = frame_number - offset
+            if (
+                0 <= test_frame < len(landmarks_by_frame)
+                and landmarks_by_frame[test_frame] is not None
+            ):
 
-        if (
-            earlier_frame >= 0
-            and landmarks_by_frame[earlier_frame] is not None
-        ):
-            return (
-                landmarks_by_frame[earlier_frame],
-                earlier_frame
-            )
+                return (
+                    get_landmarks(
+                        test_frame
+                    ),
+                    test_frame
+                )
 
     return None, frame_number
 
