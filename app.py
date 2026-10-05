@@ -594,6 +594,9 @@ if page == "Analyse Swing":
                 "🏌️ Analyse Swing"
             )
 
+            if analyse_button:
+                st.session_state["analysis_complete"] = True
+
         with info_col:
 
             with st.expander(
@@ -671,7 +674,12 @@ if page == "Analyse Swing":
             """
             )
 
-        if analyse_button:
+        if st.session_state.get(
+            "analysis_complete",
+            False
+        ):
+
+            st.write("ANALYSE BUTTON IS TRUE")
 
             # -------------------------
             # Run phase detector
@@ -710,6 +718,11 @@ if page == "Analyse Swing":
             coaching_overlay_path = (
                 report_folder
                 / "coaching_overlay.mp4"
+            )
+
+            comparison_image_path = (
+                report_folder
+                / "suggested_comparison.jpg"
             )
 
             address_image_path = DATA_DIR / "address.jpg"
@@ -1043,6 +1056,24 @@ if page == "Analyse Swing":
                     key=metric_scores.get
                 )
 
+                swing_report["worst_metric"] = worst_metric
+                swing_report["worst_metric_score"] = metric_scores[
+                    worst_metric
+                ]
+                swing_report["metric_scores"] = metric_scores
+
+                with open(
+                    swing_report_path,
+                    "w",
+                    encoding="utf-8"
+                ) as f:
+
+                    json.dump(
+                        swing_report,
+                        f,
+                        indent=4
+                    )
+
                 history_row = {
 
                     "date": datetime.now().strftime(
@@ -1366,13 +1397,13 @@ if page == "Analyse Swing":
             st.divider()
 
             st.subheader(
-                "🎯 Suggested Swing Position"
+                f"🎯 Suggested Improvement: {worst_metric}"
             )
 
             st.write(
-                "GolfAI can create a coaching overlay showing "
-                "your detected lead-arm position in red and a "
-                "suggested target position in green."
+                f"GolfAI has identified '{worst_metric}' as "
+                f"the lowest scoring metric and will generate "
+                f"a coaching overlay showing a suggested improvement."
             )
 
             st.caption(
@@ -1381,21 +1412,15 @@ if page == "Analyse Swing":
                 "or claim to show an actual performed swing."
             )
 
-            if lead_arm < 145:
+            st.info(
+                f"Current focus area: {worst_metric}"
+            )
 
-                st.warning(
-                    f"Lead arm angle at Top: "
-                    f"{lead_arm:.1f}°. "
-                    f"GolfAI target: 145°-160°."
-                )
-
-            else:
-
-                st.success(
-                    f"Lead arm angle at Top: "
-                    f"{lead_arm:.1f}°. "
-                    f"This is already within GolfAI's target range."
-                )
+            st.write(
+                f"This coaching overlay will target "
+                f"GolfAI's lowest scoring metric "
+                f"({worst_metric})."
+            )
 
 
             generate_overlay_button = st.button(
@@ -1406,25 +1431,40 @@ if page == "Analyse Swing":
 
             if generate_overlay_button:
 
-                st.info(
-                    "Generating suggested-pose coaching video..."
-                )
+                with st.spinner(
+                    "Generating coaching overlay..."
+                ):
 
-                overlay_result = subprocess.run(
-                    [
-                        PYTHON_EXE,
-                        str(
-                            ANALYSIS_DIR
-                            / "coaching_overlay.py"
-                        ),
-                        str(video_path),
-                        str(coaching_overlay_path)
-                    ],
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace"
-                )
+                    overlay_result = subprocess.run(
+                        [
+                            PYTHON_EXE,
+                            str(
+                                ANALYSIS_DIR
+                                / "coaching_overlay.py"
+                            ),
+                            str(video_path),
+                            str(coaching_overlay_path)
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace"
+                    )
+
+                    comparison_result = subprocess.run(
+                        [
+                            PYTHON_EXE,
+                            str(
+                                ANALYSIS_DIR
+                                / "comparison_overlay.py"
+                            ),
+                            str(comparison_image_path)
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace"
+                    )
 
                 with st.expander(
                     "Coaching overlay output"
@@ -1440,6 +1480,22 @@ if page == "Analyse Swing":
 
                         st.text(
                             overlay_result.stderr
+                        )
+                
+                with st.expander(
+                    "Comparison image output"
+                ):
+
+                    if comparison_result.stdout:
+
+                        st.text(
+                            comparison_result.stdout
+                        )
+
+                    if comparison_result.stderr:
+
+                        st.text(
+                            comparison_result.stderr
                         )
 
                 if (
@@ -1461,11 +1517,31 @@ if page == "Analyse Swing":
                     )
 
 
+                if (
+                    comparison_result.returncode == 0
+                    and comparison_image_path.exists()
+                ):
+
+                    st.success(
+                        "Comparison image created."
+                    )
+
+                else:
+
+                    st.warning(
+                        "Comparison image was not generated."
+                    )
+
+
             if coaching_overlay_path.exists():
 
-                st.video(
-                    str(coaching_overlay_path)
-                )
+                col1, col2 = st.columns([1, 1])
+
+                with col1:
+
+                    st.video(
+                        str(coaching_overlay_path)
+                    )
 
                 with open(
                     coaching_overlay_path,
@@ -1482,6 +1558,166 @@ if page == "Analyse Swing":
                         mime="video/mp4",
                         key=f"download_overlay_{video_name}"
                     )
+
+            if comparison_image_path.exists():
+
+                st.divider()
+
+                st.subheader(
+                    "📷 Current vs Suggested Improvement"
+                )
+
+                st.caption(
+                    f"Comparison for the lowest-scoring metric: "
+                    f"{worst_metric}"
+                )
+
+                st.image(
+                    str(comparison_image_path),
+                    use_container_width=True
+                )
+
+                COMPARISON_NOTES = {
+
+                    "Head Stability": {
+                        "why":
+                            "The measured head position changed more than "
+                            "GolfAI's preferred range between Address and Impact.",
+
+                        "change":
+                            "Reduce unnecessary head drift while allowing "
+                            "natural rotation through the swing.",
+
+                        "benefit":
+                            "A more stable reference point can help support "
+                            "more repeatable contact."
+                    },
+
+                    "Lead Arm Width": {
+                        "why":
+                            "The lead-arm angle is outside GolfAI's preferred "
+                            "range at the Top of the backswing.",
+
+                        "change":
+                            "Maintain comfortable lead-arm extension without "
+                            "locking or forcing the elbow.",
+
+                        "benefit":
+                            "This can create a more consistent backswing radius."
+                    },
+
+                    "Trail Arm Position": {
+                        "why":
+                            "The trail-arm bend is outside GolfAI's target "
+                            "range at the Top of the backswing.",
+
+                        "change":
+                            "Maintain a structured trail elbow and avoid "
+                            "excessive folding or straightening.",
+
+                        "benefit":
+                            "This can improve arm structure and transition control."
+                    },
+
+                    "Posture": {
+                        "why":
+                            "The measured spine-angle change between Address "
+                            "and Impact is larger than GolfAI's target.",
+
+                        "change":
+                            "Maintain the Address inclination more consistently "
+                            "while rotating through the swing.",
+
+                        "benefit":
+                            "This can support more consistent body position "
+                            "through Impact."
+                    },
+
+                    "Tempo": {
+                        "why":
+                            "The backswing-to-downswing timing is outside "
+                            "GolfAI's preferred 3:1 range.",
+
+                        "change":
+                            "Adjust the rhythm rather than trying to force a "
+                            "specific body position.",
+
+                        "benefit":
+                            "A more consistent rhythm can improve sequencing "
+                            "and repeatability."
+                    },
+
+                    "Swing Width": {
+                        "why":
+                            "The trail shoulder-to-trail wrist distance at "
+                            "the Top is below GolfAI's target range.",
+
+                        "change":
+                            "Keep the hands comfortably farther from the chest "
+                            "and maintain extension through the backswing.",
+
+                        "benefit":
+                            "This can create a wider, more consistent swing arc."
+                    },
+
+                    "Hip Sway": {
+                        "why":
+                            "The measured lateral hip movement between Address "
+                            "and the Top is above GolfAI's preferred range.",
+
+                        "change":
+                            "Reduce excessive lateral movement while maintaining "
+                            "a natural hip turn.",
+
+                        "benefit":
+                            "This can improve centred rotation and consistency."
+                    },
+
+                    "Finish Stability": {
+                        "why":
+                            "GolfAI detected more body movement than preferred "
+                            "after the Finish position.",
+
+                        "change":
+                            "Complete the swing in balance and practise holding "
+                            "the Finish position.",
+
+                        "benefit":
+                            "A more stable finish can indicate improved balance "
+                            "and control."
+                    }
+                }
+
+
+                comparison_notes = COMPARISON_NOTES.get(
+                    worst_metric
+                )
+
+
+                if comparison_notes is not None:
+
+                    note_col1, note_col2, note_col3 = st.columns(3)
+
+                    with note_col1:
+
+                        st.warning(
+                            "### Why the score is low\n\n"
+                            + comparison_notes["why"]
+                        )
+
+                    with note_col2:
+
+                        st.info(
+                            "### What to change\n\n"
+                            + comparison_notes["change"]
+                        )
+
+                    with note_col3:
+
+                        st.success(
+                            "### Expected improvement\n\n"
+                            + comparison_notes["benefit"]
+                        )
 
             # -------------------------
             # Recommended Drill

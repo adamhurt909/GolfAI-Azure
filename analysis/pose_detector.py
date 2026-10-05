@@ -356,34 +356,98 @@ right_arm_angle = angle_between_three_points(
     top_right_wrist
 )
 
-# Lead arm should generally be the straighter arm
-# at the top of the backswing.
-#
-# Larger angle = straighter arm.
+ARM_ROLE_MIN_DIFFERENCE = 15.0
 
-lead_arm_angle_top = left_arm_angle
+arm_angle_difference = abs(
+    left_arm_angle
+    - right_arm_angle
+)
 
-trail_arm_angle_top = right_arm_angle
+if arm_angle_difference >= ARM_ROLE_MIN_DIFFERENCE:
+
+    if left_arm_angle >= right_arm_angle:
+
+        lead_arm_angle = left_arm_angle
+        trail_arm_angle = right_arm_angle
+
+        lead_arm_side = "left"
+        trail_arm_side = "right"
+
+    else:
+
+        lead_arm_angle = right_arm_angle
+        trail_arm_angle = left_arm_angle
+
+        lead_arm_side = "right"
+        trail_arm_side = "left"
+
+else:
+
+    # Fallback for a right-handed golfer when the
+    # two detected angles are too similar to classify reliably.
+    lead_arm_angle = left_arm_angle
+    trail_arm_angle = right_arm_angle
+
+    lead_arm_side = "left"
+    trail_arm_side = "right"
 
 # -------------------------
 # Swing Width
 # -------------------------
 
+if trail_arm_side == "left":
+
+    trail_shoulder_at_top = top_left_shoulder
+    trail_wrist_at_top = top_left_wrist
+
+else:
+
+    trail_shoulder_at_top = top_right_shoulder
+    trail_wrist_at_top = top_right_wrist
+
+
 swing_width = distance_between_points(
-    top_right_shoulder,
-    top_right_wrist
+    trail_shoulder_at_top,
+    trail_wrist_at_top
 )
 
 print("")
 print("ARM STRUCTURE AT TOP")
 print("--------------------")
+
 print(
-    f"Lead Arm : "
-    f"{lead_arm_angle_top:.2f}"
+    f"Raw left arm angle: "
+    f"{left_arm_angle:.2f}"
 )
+
+print(
+    f"Raw right arm angle: "
+    f"{right_arm_angle:.2f}"
+)
+
+print(
+    f"Angle difference: "
+    f"{arm_angle_difference:.2f}"
+)
+
+print(
+    f"Detected lead arm side: "
+    f"{lead_arm_side}"
+)
+
+print(
+    f"Detected trail arm side: "
+    f"{trail_arm_side}"
+)
+
+print(
+    f"Lead Arm: "
+    f"{lead_arm_angle:.2f}"
+)
+
 print(
     f"Trail Arm: "
-    f"{trail_arm_angle_top:.2f}"
+    f"{trail_arm_angle:.2f}"
 )
 
 print("")
@@ -572,8 +636,22 @@ print(
 
 print("")
 print("ARM STRUCTURE AT TOP")
-print(f"Lead arm angle at top: {lead_arm_angle_top:.2f} degrees")
-print(f"Trail arm angle at top: {trail_arm_angle_top:.2f} degrees")
+print(
+    f"Lead arm angle at top: "
+    f"{lead_arm_angle:.2f} degrees"
+)
+print(
+    f"Trail arm angle at top: "
+    f"{trail_arm_angle:.2f} degrees"
+)
+print(
+    f"Lead arm detected side: "
+    f"{lead_arm_side}"
+)
+print(
+    f"Trail arm detected side: "
+    f"{trail_arm_side}"
+)
 
 print("")
 print("HIP SWAY")
@@ -653,17 +731,36 @@ elif head_movement < 0.12:
 else:
     findings.append("Head movement appears high.")
 
-if lead_arm_angle_top > 160:
-    findings.append("Lead arm appears well extended at the top.")
-elif lead_arm_angle_top > 140:
-    findings.append("Lead arm has a moderate bend at the top.")
-else:
-    findings.append("Lead arm appears quite bent at the top.")
+if lead_arm_angle > 160:
 
-if trail_arm_angle_top < 120:
-    findings.append("Trail arm has a compact bend at the top.")
+    findings.append(
+        "Lead arm appears well extended at the top."
+    )
+
+elif lead_arm_angle > 140:
+
+    findings.append(
+        "Lead arm has a moderate bend at the top."
+    )
+
 else:
-    findings.append("Trail arm appears more extended at the top.")
+
+    findings.append(
+        "Lead arm appears quite bent at the top."
+    )
+
+
+if trail_arm_angle < 120:
+
+    findings.append(
+        "Trail arm has a compact bend at the top."
+    )
+
+else:
+
+    findings.append(
+        "Trail arm appears more extended at the top."
+    )
 
 if spine_angle_change < 8:
     findings.append("Spine angle appears well maintained from address to impact.")
@@ -701,8 +798,27 @@ swing_report = {
         "swing_width": round(swing_width, 4),
         "hip_sway": round(hip_sway, 4),
         "finish_stability": round(finish_stability, 4),
-        "lead_arm_angle_at_top_degrees": round(lead_arm_angle_top, 2),
-        "trail_arm_angle_at_top_degrees": round(trail_arm_angle_top, 2),
+        "left_arm_angle_at_top_degrees": round(
+            left_arm_angle,
+            2
+        ),
+
+        "right_arm_angle_at_top_degrees": round(
+            right_arm_angle,
+            2
+        ),
+
+        "lead_arm_angle_at_top_degrees": round(
+            lead_arm_angle,
+            2
+        ),
+
+        "trail_arm_angle_at_top_degrees": round(
+            trail_arm_angle,
+            2
+        ),
+        "lead_arm_detected_side": lead_arm_side,
+        "trail_arm_detected_side": trail_arm_side,
         "spine_angle_at_address_degrees": round(address_spine_angle, 2),
         "spine_angle_at_impact_degrees": round(impact_spine_angle, 2),
         "spine_angle_change_degrees": round(spine_angle_change, 2)

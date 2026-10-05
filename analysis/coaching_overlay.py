@@ -108,6 +108,16 @@ current_lead_arm_angle = float(
     ]
 )
 
+current_swing_width = float(
+    swing_report["metrics"][
+        "swing_width"
+    ]
+)
+
+worst_metric = swing_report.get(
+    "worst_metric",
+    "Lead Arm Width"
+)
 
 # -------------------------
 # Coaching configuration
@@ -115,11 +125,44 @@ current_lead_arm_angle = float(
 
 TARGET_LEAD_ARM_ANGLE = 150.0
 
-# Do not exaggerate the correction in the first version.
+TARGET_SWING_WIDTH = 0.08
+
+USING_SWING_WIDTH = (
+    worst_metric == "Swing Width"
+)
+
+USING_LEAD_ARM = (
+    worst_metric == "Lead Arm Width"
+)
+
+USING_POSTURE = (
+    worst_metric == "Posture"
+)
+
+USING_HIP_SWAY = (
+    worst_metric == "Hip Sway"
+)
+
+USING_HEAD_STABILITY = (
+    worst_metric == "Head Stability"
+)
+
+USING_TRAIL_ARM = (
+    worst_metric == "Trail Arm Position"
+)
+
+USING_FINISH_STABILITY = (
+    worst_metric == "Finish Stability"
+)
+
+USING_TEMPO = (
+    worst_metric == "Tempo"
+)
+
+# Existing lead arm logic
+
 MAXIMUM_CORRECTION_DEGREES = 25.0
 
-# Only suggest straightening when the detected arm is
-# below the bottom of GolfAI's ideal range.
 CORRECTION_REQUIRED = (
     current_lead_arm_angle < 145.0
 )
@@ -141,16 +184,34 @@ suggested_lead_arm_angle = min(
     + applied_correction
 )
 
+suggested_lead_arm_angle = min(
+    TARGET_LEAD_ARM_ANGLE,
+    current_lead_arm_angle
+    + applied_correction
+)
+
 
 print("")
 print("COACHING OVERLAY")
 print("----------------")
+
+print(
+    f"Worst metric: {worst_metric}"
+)
+print(
+    f"USING_SWING_WIDTH = "
+    f"{USING_SWING_WIDTH}"
+)
 print(f"Input video: {input_video_path}")
 print(f"Output video: {output_video_path}")
 print(f"Top frame: {top_frame}")
 print(
     f"Current lead-arm angle: "
     f"{current_lead_arm_angle:.2f}"
+)
+print(
+    f"Current swing width: "
+    f"{current_swing_width:.3f}"
 )
 print(
     f"Suggested lead-arm angle: "
@@ -510,13 +571,13 @@ correction_window_frames = max(
 # -------------------------
 
 fourcc = cv2.VideoWriter_fourcc(
-    *"mp4v"
+    *"avc1"
 )
 
 writer = cv2.VideoWriter(
     str(output_video_path),
     fourcc,
-    fps,
+    fps / 2, #Makes the suggested post-video go 2x slower than origional
     (
         frame_width,
         frame_height
@@ -595,12 +656,36 @@ with mp_pose.Pose(
                 mp_pose.PoseLandmark.LEFT_SHOULDER
             ]
 
+            nose_landmark = landmarks[
+                mp_pose.PoseLandmark.NOSE
+            ]
+
+            right_shoulder_landmark = landmarks[
+                mp_pose.PoseLandmark.RIGHT_SHOULDER
+            ]
+
+            left_hip_landmark = landmarks[
+                mp_pose.PoseLandmark.LEFT_HIP
+            ]
+
+            right_hip_landmark = landmarks[
+                mp_pose.PoseLandmark.RIGHT_HIP
+            ]
+
             left_elbow_landmark = landmarks[
                 mp_pose.PoseLandmark.LEFT_ELBOW
             ]
 
             left_wrist_landmark = landmarks[
                 mp_pose.PoseLandmark.LEFT_WRIST
+            ]
+
+            right_elbow_landmark = landmarks[
+                mp_pose.PoseLandmark.RIGHT_ELBOW
+            ]
+
+            right_wrist_landmark = landmarks[
+                mp_pose.PoseLandmark.RIGHT_WRIST
             ]
 
             shoulder = (
@@ -659,6 +744,104 @@ with mp_pose.Pose(
                 )
             )
 
+            nose_pixels = (
+                normalised_to_pixels(
+                    (
+                        nose_landmark.x,
+                        nose_landmark.y
+                    ),
+                    frame_width,
+                    frame_height
+                )
+            )
+
+            right_shoulder_landmark = landmarks[
+                mp_pose.PoseLandmark.RIGHT_SHOULDER
+            ]
+
+            right_wrist_landmark = landmarks[
+                mp_pose.PoseLandmark.RIGHT_WRIST
+            ]
+
+            trail_shoulder = (
+                right_shoulder_landmark.x,
+                right_shoulder_landmark.y
+            )
+
+            trail_wrist = (
+                right_wrist_landmark.x,
+                right_wrist_landmark.y
+            )
+
+            trail_elbow = (
+                right_elbow_landmark.x,
+                right_elbow_landmark.y
+            )
+
+            trail_shoulder_pixels = (
+                normalised_to_pixels(
+                    trail_shoulder,
+                    frame_width,
+                    frame_height
+                )
+            )
+
+            trail_wrist_pixels = (
+                normalised_to_pixels(
+                    trail_wrist,
+                    frame_width,
+                    frame_height
+                )
+            )
+
+            trail_elbow_pixels = (
+                normalised_to_pixels(
+                    trail_elbow,
+                    frame_width,
+                    frame_height
+                )
+            )
+
+            shoulder_centre = (
+                (
+                    left_shoulder_landmark.x
+                    + right_shoulder_landmark.x
+                ) / 2,
+
+                (
+                    left_shoulder_landmark.y
+                    + right_shoulder_landmark.y
+                ) / 2
+            )
+
+            hip_centre = (
+                (
+                    left_hip_landmark.x
+                    + right_hip_landmark.x
+                ) / 2,
+
+                (
+                    left_hip_landmark.y
+                    + right_hip_landmark.y
+                ) / 2
+            )
+
+            shoulder_centre_pixels = (
+                normalised_to_pixels(
+                    shoulder_centre,
+                    frame_width,
+                    frame_height
+                )
+            )
+
+            hip_centre_pixels = (
+                normalised_to_pixels(
+                    hip_centre,
+                    frame_width,
+                    frame_height
+                )
+            )
+
             suggested_wrist_pixels = (
                 normalised_to_pixels(
                     displayed_suggested_wrist,
@@ -667,81 +850,338 @@ with mp_pose.Pose(
                 )
             )
 
-            # Current detected arm: red
-            cv2.line(
-                frame,
-                shoulder_pixels,
-                elbow_pixels,
-                (0, 0, 255),
-                5,
-                cv2.LINE_AA
-            )
+            if USING_TEMPO:
 
-            cv2.line(
-                frame,
-                elbow_pixels,
-                wrist_pixels,
-                (0, 0, 255),
-                5,
-                cv2.LINE_AA
-            )
-
-            # Suggested lead arm: green
-            cv2.line(
-                frame,
-                shoulder_pixels,
-                elbow_pixels,
-                (0, 255, 0),
-                3,
-                cv2.LINE_AA
-            )
-
-            cv2.line(
-                frame,
-                elbow_pixels,
-                suggested_wrist_pixels,
-                (0, 255, 0),
-                5,
-                cv2.LINE_AA
-            )
-
-            # Movement arrow from current wrist
-            # to suggested wrist.
-            if CORRECTION_REQUIRED:
-
-                cv2.arrowedLine(
+                cv2.putText(
                     frame,
-                    wrist_pixels,
-                    suggested_wrist_pixels,
+                    "TEMPO IMPROVEMENT",
+                    (40, 200),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.0,
                     (0, 255, 255),
-                    3,
-                    cv2.LINE_AA,
-                    tipLength=0.20
+                    3
                 )
 
-            for point in [
-                shoulder_pixels,
-                elbow_pixels,
-                wrist_pixels
-            ]:
+                cv2.putText(
+                    frame,
+                    "Target Tempo: 3.0 : 1",
+                    (40, 250),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 0),
+                    2
+                )
+
+            elif USING_FINISH_STABILITY:
+
+                target_head = (
+                    nose_pixels[0],
+                    nose_pixels[1]
+                )
 
                 cv2.circle(
                     frame,
-                    point,
-                    7,
+                    nose_pixels,
+                    12,
                     (0, 0, 255),
-                    -1,
+                    -1
+                )
+
+                cv2.circle(
+                    frame,
+                    target_head,
+                    12,
+                    (0, 255, 0),
+                    -1
+                )
+
+                cv2.putText(
+                    frame,
+                    "Hold Finish",
+                    (
+                        nose_pixels[0] + 20,
+                        nose_pixels[1] - 20
+                    ),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 0),
+                    2
+                )
+
+            elif USING_TRAIL_ARM:
+
+                target_elbow = (
+                    trail_elbow_pixels[0] - 30,
+                    trail_elbow_pixels[1] - 30
+                )
+
+                cv2.line(
+                    frame,
+                    trail_shoulder_pixels,
+                    trail_elbow_pixels,
+                    (0, 0, 255),
+                    6,
                     cv2.LINE_AA
                 )
 
-            cv2.circle(
-                frame,
-                suggested_wrist_pixels,
-                8,
-                (0, 255, 0),
-                -1,
-                cv2.LINE_AA
-            )
+                cv2.line(
+                    frame,
+                    trail_elbow_pixels,
+                    trail_wrist_pixels,
+                    (0, 0, 255),
+                    6,
+                    cv2.LINE_AA
+                )
+
+                cv2.line(
+                    frame,
+                    trail_shoulder_pixels,
+                    target_elbow,
+                    (0, 255, 0),
+                    6,
+                    cv2.LINE_AA
+                )
+
+                cv2.line(
+                    frame,
+                    target_elbow,
+                    trail_wrist_pixels,
+                    (0, 255, 0),
+                    6,
+                    cv2.LINE_AA
+                )
+
+                cv2.arrowedLine(
+                    frame,
+                    trail_elbow_pixels,
+                    target_elbow,
+                    (0, 255, 255),
+                    4,
+                    cv2.LINE_AA
+                )
+
+            elif USING_HEAD_STABILITY:
+
+                target_head = (
+                    nose_pixels[0],
+                    nose_pixels[1] - 30
+                )
+
+                cv2.circle(
+                    frame,
+                    nose_pixels,
+                    12,
+                    (0, 0, 255),
+                    -1
+                )
+
+                cv2.circle(
+                    frame,
+                    target_head,
+                    12,
+                    (0, 255, 0),
+                    -1
+                )
+
+                cv2.arrowedLine(
+                    frame,
+                    nose_pixels,
+                    target_head,
+                    (0, 255, 255),
+                    5,
+                    cv2.LINE_AA
+                )
+
+            elif USING_HIP_SWAY:
+
+                target_hip = (
+                    hip_centre_pixels[0] - 40,
+                    hip_centre_pixels[1]
+                )
+
+                cv2.circle(
+                    frame,
+                    hip_centre_pixels,
+                    12,
+                    (0, 0, 255),
+                    -1
+                )
+
+                cv2.circle(
+                    frame,
+                    target_hip,
+                    12,
+                    (0, 255, 0),
+                    -1
+                )
+
+                cv2.arrowedLine(
+                    frame,
+                    hip_centre_pixels,
+                    target_hip,
+                    (0, 255, 255),
+                    5,
+                    cv2.LINE_AA
+                )
+
+            elif USING_POSTURE:
+
+                cv2.line(
+                    frame,
+                    shoulder_centre_pixels,
+                    hip_centre_pixels,
+                    (0, 0, 255),
+                    8,
+                    cv2.LINE_AA
+                )
+
+                target_shoulder = (
+                    shoulder_centre_pixels[0] + 30,
+                    shoulder_centre_pixels[1]
+                )
+
+                cv2.line(
+                    frame,
+                    target_shoulder,
+                    hip_centre_pixels,
+                    (0, 255, 0),
+                    8,
+                    cv2.LINE_AA
+                )
+
+                cv2.arrowedLine(
+                    frame,
+                    shoulder_centre_pixels,
+                    target_shoulder,
+                    (0, 255, 255),
+                    4,
+                    cv2.LINE_AA
+                )
+
+            elif USING_SWING_WIDTH:
+
+                target_width_pixels = 40
+
+                target_wrist_x = (
+                    trail_wrist_pixels[0]
+                    + target_width_pixels
+                )
+
+                target_wrist_y = (
+                    trail_wrist_pixels[1]
+                )
+
+                cv2.line(
+                    frame,
+                    trail_shoulder_pixels,
+                    trail_wrist_pixels,
+                    (0, 0, 255),
+                    6,
+                    cv2.LINE_AA
+                )
+
+                cv2.line(
+                    frame,
+                    trail_shoulder_pixels,
+                    (
+                        target_wrist_x,
+                        target_wrist_y
+                    ),
+                    (0, 255, 0),
+                    6,
+                    cv2.LINE_AA
+                )
+
+                cv2.arrowedLine(
+                    frame,
+                    trail_wrist_pixels,
+                    (
+                        target_wrist_x,
+                        target_wrist_y
+                    ),
+                    (0, 255, 255),
+                    4,
+                    cv2.LINE_AA,
+                    tipLength=0.25
+                )
+
+            else:
+
+                # Current detected arm: red
+                cv2.line(
+                    frame,
+                    shoulder_pixels,
+                    elbow_pixels,
+                    (0, 0, 255),
+                    5,
+                    cv2.LINE_AA
+                )
+
+                cv2.line(
+                    frame,
+                    elbow_pixels,
+                    wrist_pixels,
+                    (0, 0, 255),
+                    5,
+                    cv2.LINE_AA
+                )
+
+                # Suggested lead arm: green
+                cv2.line(
+                    frame,
+                    shoulder_pixels,
+                    elbow_pixels,
+                    (0, 255, 0),
+                    3,
+                    cv2.LINE_AA
+                )
+
+                cv2.line(
+                    frame,
+                    elbow_pixels,
+                    suggested_wrist_pixels,
+                    (0, 255, 0),
+                    5,
+                    cv2.LINE_AA
+                )
+
+                # Movement arrow from current wrist
+                # to suggested wrist.
+                if CORRECTION_REQUIRED:
+
+                    cv2.arrowedLine(
+                        frame,
+                        wrist_pixels,
+                        suggested_wrist_pixels,
+                        (0, 255, 255),
+                        3,
+                        cv2.LINE_AA,
+                        tipLength=0.20
+                    )
+
+                for point in [
+                    shoulder_pixels,
+                    elbow_pixels,
+                    wrist_pixels
+                ]:
+
+                    cv2.circle(
+                        frame,
+                        point,
+                        7,
+                        (0, 0, 255),
+                        -1,
+                        cv2.LINE_AA
+                    )
+
+                cv2.circle(
+                    frame,
+                    suggested_wrist_pixels,
+                    8,
+                    (0, 255, 0),
+                    -1,
+                    cv2.LINE_AA
+                )
 
         # -------------------------
         # On-screen coaching panel
@@ -771,43 +1211,169 @@ with mp_pose.Pose(
             frame
         )
 
+        if USING_TEMPO:
+
+            overlay_title = (
+                "GolfAI Suggested Tempo"
+            )
+
+        elif USING_FINISH_STABILITY:
+
+            overlay_title = (
+                "GolfAI Suggested Finish Stability"
+            )
+
+        elif USING_TRAIL_ARM:
+
+            overlay_title = (
+                "GolfAI Suggested Trail Arm Position"
+            )
+
+        elif USING_HEAD_STABILITY:
+
+            overlay_title = (
+                "GolfAI Suggested Head Stability"
+            )
+
+        elif USING_HIP_SWAY:
+
+            overlay_title = (
+                "GolfAI Suggested Hip Position"
+            )
+
+        elif USING_POSTURE:
+
+            overlay_title = (
+                "GolfAI Suggested Posture"
+            )
+
+        elif USING_SWING_WIDTH:
+
+            overlay_title = (
+                "GolfAI Suggested Swing Width"
+            )
+
+        else:
+
+            overlay_title = (
+                "GolfAI Suggested Lead-Arm Position"
+            )
+
         draw_label(
             frame,
-            "GolfAI Suggested Lead-Arm Position",
+            overlay_title,
             (20, 34),
             (255, 255, 255),
             font_scale=0.75
         )
 
-        cv2.putText(
-            frame,
-            (
-                f"Current at Top: "
-                f"{current_lead_arm_angle:.1f} degrees"
-            ),
-            (20, 73),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (0, 0, 255),
-            2,
-            cv2.LINE_AA
-        )
+        if USING_SWING_WIDTH:
 
-        cv2.putText(
-            frame,
-            (
-                f"Suggested target: "
-                f"{suggested_lead_arm_angle:.1f} degrees"
-            ),
-            (20, 104),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.65,
-            (0, 255, 0),
-            2,
-            cv2.LINE_AA
-        )
+            cv2.putText(
+                frame,
+                (
+                    f"Current Width: "
+                    f"{current_swing_width:.3f}"
+                ),
+                (20, 73),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 0, 255),
+                2,
+                cv2.LINE_AA
+            )
 
-        if CORRECTION_REQUIRED:
+            cv2.putText(
+                frame,
+                (
+                    f"Target Width: "
+                    f"{TARGET_SWING_WIDTH:.3f}"
+                ),
+                (20, 104),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA
+            )
+
+        else:
+
+            cv2.putText(
+                frame,
+                (
+                    f"Current at Top: "
+                    f"{current_lead_arm_angle:.1f} degrees"
+                ),
+                (20, 73),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 0, 255),
+                2,
+                cv2.LINE_AA
+            )
+
+            cv2.putText(
+                frame,
+                (
+                    f"Suggested target: "
+                    f"{suggested_lead_arm_angle:.1f} degrees"
+                ),
+                (20, 104),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA
+            )
+
+        if USING_TEMPO:
+
+            guidance_text = (
+                "Target rhythm = 3:1 "
+            )
+
+        elif USING_FINISH_STABILITY:
+
+            guidance_text = (
+                "Red = finish position | "
+                "Green = stable finish | "
+                "Hold your finish longer"
+            )
+
+        elif USING_TRAIL_ARM:
+
+            guidance_text = (
+                "Red = current trail arm | "
+                "Green = target trail arm | "
+                "Yellow = improve elbow position"
+            )
+
+        elif USING_HEAD_STABILITY:
+
+            guidance_text = (
+                "Red = head position | "
+                "Green = target head position | "
+                "Yellow = reduce movement"
+            )
+
+        elif USING_HIP_SWAY:
+
+            guidance_text = (
+                "Red = current hips | "
+                "Green = target hips | "
+                "Yellow = reduce sway"
+            )
+
+        elif USING_SWING_WIDTH:
+
+            guidance_text = (
+                "Red = current width | "
+                "Green = target width | "
+                "Yellow = move hands wider"
+            )
+
+        elif CORRECTION_REQUIRED:
 
             guidance_text = (
                 "Red = current | Green = suggested"
@@ -816,8 +1382,7 @@ with mp_pose.Pose(
         else:
 
             guidance_text = (
-                "Lead arm is already within "
-                "GolfAI's target range"
+                "Lead arm is already within target range"
             )
 
         cv2.putText(
@@ -848,7 +1413,9 @@ with mp_pose.Pose(
                 cv2.LINE_AA
             )
 
-        writer.write(frame)
+        for _ in range(2):
+
+            writer.write(frame)
 
         frame_number += 1
 
