@@ -111,23 +111,49 @@ def detect_pose_on_image(image):
     """Run MediaPipe Pose on a single BGR image.
 
     Returns the landmark list (normalised) or None if no
-    pose was detected.
+    pose was detected. Tries a couple of detection settings so
+    that overlays still appear in environments (like the Linux
+    container) where the default pass is less reliable.
     """
+
+    if image is None:
+        print("detect_pose_on_image: received no image.")
+        return None
 
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    with mp.solutions.pose.Pose(
-        static_image_mode=True,
-        model_complexity=1,
-        min_detection_confidence=0.5
-    ) as pose:
+    # Try a few configurations; the first that finds a pose wins.
+    attempts = [
+        {"model_complexity": 1, "min_detection_confidence": 0.5},
+        {"model_complexity": 1, "min_detection_confidence": 0.3},
+        {"model_complexity": 2, "min_detection_confidence": 0.3},
+    ]
 
-        results = pose.process(rgb_image)
+    for settings in attempts:
 
-    if not results.pose_landmarks:
-        return None
+        try:
+            with mp.solutions.pose.Pose(
+                static_image_mode=True,
+                **settings
+            ) as pose:
 
-    return results.pose_landmarks.landmark
+                results = pose.process(rgb_image)
+
+        except Exception as error:
+            print(f"detect_pose_on_image: error {error}")
+            continue
+
+        if results.pose_landmarks:
+            print(
+                "detect_pose_on_image: pose found "
+                f"(settings={settings})."
+            )
+            return results.pose_landmarks.landmark
+
+    print(
+        "detect_pose_on_image: no pose detected after all attempts."
+    )
+    return None
 
 
 def landmark_to_pixels(

@@ -1,6 +1,8 @@
 import cv2
 import json
 import math
+import shutil
+import subprocess
 import sys
 
 from pathlib import Path
@@ -637,37 +639,37 @@ correction_window_frames = max(
 # -------------------------
 
 # Browsers (and Streamlit's st.video) can only play H.264 in an
-# MP4 container. "mp4v"/"FMP4" produces a file that opens in
-# OpenCV but shows a black, unplayable frame in the browser, so
-# we must write H.264. Try the browser-friendly codecs first and
-# fall back only if none are available in this OpenCV build.
+# MP4 container. OpenCV's H.264 encoder is available on Windows
+# but NOT in opencv-python-headless on Linux (our Azure container),
+# where it silently falls back to "mp4v"/"FMP4" -- a file that
+# opens in OpenCV but shows a black, unplayable frame in the
+# browser.
+#
+# To behave identically everywhere we:
+#   1. Write the overlay to a temporary file with "mp4v", which
+#      is always available in OpenCV.
+#   2. Transcode that to browser-friendly H.264 with ffmpeg into
+#      the final output path (ffmpeg is installed in the image).
+#   3. If ffmpeg is unavailable, try OpenCV's own H.264 encoders
+#      as a best-effort fallback.
 output_fps = fps / 2  # Suggested video plays at half speed.
 
-writer = None
+temp_video_path = output_video_path.with_name(
+    output_video_path.stem + "_raw.mp4"
+)
 
-for codec_name in ("avc1", "H264", "h264", "mp4v"):
-
-    candidate_fourcc = cv2.VideoWriter_fourcc(*codec_name)
-
-    candidate_writer = cv2.VideoWriter(
-        str(output_video_path),
-        candidate_fourcc,
-        output_fps,
-        (
-            frame_width,
-            frame_height
-        )
+writer = cv2.VideoWriter(
+    str(temp_video_path),
+    cv2.VideoWriter_fourcc(*"mp4v"),
+    output_fps,
+    (
+        frame_width,
+        frame_height
     )
-
-    if candidate_writer.isOpened():
-        writer = candidate_writer
-        print(f"Writing video with codec: {codec_name}")
-        break
-
-    candidate_writer.release()
+)
 
 
-if writer is None or not writer.isOpened():
+if not writer.isOpened():
 
     print(
         "Could not create the output video."
@@ -1722,6 +1724,119 @@ with mp_pose.Pose(
 
 capture.release()
 writer.release()
+
+
+# -------------------------
+# Transcode to browser-friendly H.264
+# -------------------------
+# OpenCV wrote an "mp4v" file (always available). Browsers need
+# H.264, so transcode with ffmpeg if present. If ffmpeg is not
+# available, fall back to re-encoding with OpenCV's own H.264
+# codecs, and only as a last resort keep the mp4v file.
+
+def transcode_to_h264(source_path, destination_path):
+    """Transcode a video to H.264/MP4 using ffmpeg.
+
+    Returns True on success. yuv420p + faststart make the file
+    playable in browsers and seekable from the first byte.
+    """
+
+    ffmpeg = shutil.which("ffmpeg")
+
+    if ffmpeg is None:
+        return False
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-i", str(source_path),
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-an",
+        str(destination_path)
+    ]
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True
+    )
+
+    return (
+        result.returncode == 0
+        and destination_path.exists()
+        and destination_path.stat().st_size > 0
+    )
+
+
+def reencode_with_opencv_h264(source_path, destination_path):
+    """Best-effort re-encode to H.264 using OpenCV directly."""
+
+    reader = cv2.VideoCapture(str(source_path))
+
+    if not reader.isOpened():
+        return False
+
+    source_fps = reader.get(cv2.CAP_PROP_FPS) or output_fps
+    width = int(reader.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(reader.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    out_writer = None
+
+    for codec_name in ("avc1", "H264", "h264"):
+
+        candidate = cv2.VideoWriter(
+            str(destination_path),
+            cv2.VideoWriter_fourcc(*codec_name),
+            source_fps,
+            (width, height)
+        )
+
+        if candidate.isOpened():
+            out_writer = candidate
+            break
+
+        candidate.release()
+
+    if out_writer is None:
+        reader.release()
+        return False
+
+    while True:
+        ok, frame = reader.read()
+        if not ok:
+            break
+        out_writer.write(frame)
+
+    reader.release()
+    out_writer.release()
+
+    return (
+        destination_path.exists()
+        and destination_path.stat().st_size > 0
+    )
+
+
+transcoded = transcode_to_h264(temp_video_path, output_video_path)
+
+if transcoded:
+    print("Transcoded to H.264 with ffmpeg.")
+    temp_video_path.unlink(missing_ok=True)
+
+elif reencode_with_opencv_h264(temp_video_path, output_video_path):
+    print("Re-encoded to H.264 with OpenCV.")
+    temp_video_path.unlink(missing_ok=True)
+
+else:
+    # Last resort: keep the mp4v file so there is still a video.
+    # It may not play in all browsers, but nothing is lost.
+    print(
+        "WARNING: H.264 transcode unavailable; "
+        "keeping mp4v output (may not play in browser)."
+    )
+    if temp_video_path.exists():
+        shutil.move(str(temp_video_path), str(output_video_path))
 
 
 # -------------------------
