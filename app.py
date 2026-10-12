@@ -1589,10 +1589,32 @@ if page == "Analyse Swing":
                     f"{worst_metric}"
                 )
 
-                st.image(
-                    str(comparison_image_path),
-                    width=1200
-                )
+                # Stretch the comparison image to the full page
+                # width in a way that works across Streamlit
+                # versions. Older versions (e.g. 1.39 on Azure)
+                # use `use_column_width`; newer versions removed it
+                # in favour of `use_container_width`. We detect
+                # which one the installed st.image accepts.
+                import inspect as _inspect
+
+                _image_params = _inspect.signature(
+                    st.image
+                ).parameters
+
+                if "use_container_width" in _image_params:
+                    st.image(
+                        str(comparison_image_path),
+                        use_container_width=True
+                    )
+                elif "use_column_width" in _image_params:
+                    st.image(
+                        str(comparison_image_path),
+                        use_column_width="always"
+                    )
+                else:
+                    st.image(
+                        str(comparison_image_path)
+                    )
 
                 COMPARISON_NOTES = {
 
@@ -1715,25 +1737,70 @@ if page == "Analyse Swing":
 
                     note_col1, note_col2, note_col3 = st.columns(3)
 
+                    # Render as fixed-height cards so all three
+                    # boxes are the same size regardless of how
+                    # much text each one contains. (st.warning/
+                    # st.info/st.success auto-size to their text,
+                    # which left the shorter "Expected improvement"
+                    # box smaller than the others.)
+                    def note_card(title, body, bg, border, title_colour):
+                        return (
+                            f"""
+                            <div style="
+                                background-color: {bg};
+                                border-left: 6px solid {border};
+                                border-radius: 8px;
+                                padding: 16px;
+                                min-height: 150px;
+                                height: 100%;
+                            ">
+                                <div style="
+                                    font-weight: 700;
+                                    color: {title_colour};
+                                    margin-bottom: 8px;
+                                ">{title}</div>
+                                <div style="color: #1f2937;">{body}</div>
+                            </div>
+                            """
+                        )
+
                     with note_col1:
 
-                        st.warning(
-                            "### Why the score is low\n\n"
-                            + comparison_notes["why"]
+                        st.markdown(
+                            note_card(
+                                "Why the score is low",
+                                comparison_notes["why"],
+                                "#FEF9E7",
+                                "#F1C40F",
+                                "#8A6D0B"
+                            ),
+                            unsafe_allow_html=True
                         )
 
                     with note_col2:
 
-                        st.info(
-                            "### What to change\n\n"
-                            + comparison_notes["change"]
+                        st.markdown(
+                            note_card(
+                                "What to change",
+                                comparison_notes["change"],
+                                "#EAF2FB",
+                                "#3498DB",
+                                "#1B4F72"
+                            ),
+                            unsafe_allow_html=True
                         )
 
                     with note_col3:
 
-                        st.success(
-                            "### Expected improvement\n\n"
-                            + comparison_notes["benefit"]
+                        st.markdown(
+                            note_card(
+                                "Expected improvement",
+                                comparison_notes["benefit"],
+                                "#EAF7EE",
+                                "#27AE60",
+                                "#1D6F42"
+                            ),
+                            unsafe_allow_html=True
                         )
 
             # -------------------------
