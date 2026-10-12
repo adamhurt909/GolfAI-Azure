@@ -102,16 +102,60 @@ top_frame = int(
     phase_report["top"]
 )
 
-current_lead_arm_angle = float(
-    swing_report["metrics"][
-        "lead_arm_angle_at_top_degrees"
-    ]
+address_frame = int(
+    phase_report.get("address", top_frame)
 )
 
-current_swing_width = float(
-    swing_report["metrics"][
-        "swing_width"
-    ]
+impact_frame = int(
+    phase_report.get("impact", top_frame)
+)
+
+finish_frame = int(
+    phase_report.get("finish", top_frame)
+)
+
+metrics = swing_report["metrics"]
+
+
+def metric_value(key, default=0.0):
+    """Safely read a numeric metric from the swing report."""
+
+    try:
+        return float(metrics[key])
+    except (KeyError, TypeError, ValueError):
+        return float(default)
+
+
+current_lead_arm_angle = metric_value(
+    "lead_arm_angle_at_top_degrees"
+)
+
+current_swing_width = metric_value(
+    "swing_width"
+)
+
+current_trail_arm_angle = metric_value(
+    "trail_arm_angle_at_top_degrees"
+)
+
+current_spine_angle_change = metric_value(
+    "spine_angle_change_degrees"
+)
+
+current_hip_sway = metric_value(
+    "hip_sway"
+)
+
+current_head_movement = metric_value(
+    "head_movement_address_to_impact"
+)
+
+current_finish_stability = metric_value(
+    "finish_stability"
+)
+
+current_tempo_ratio = metric_value(
+    "tempo_ratio"
 )
 
 worst_metric = swing_report.get(
@@ -136,7 +180,7 @@ USING_LEAD_ARM = (
 )
 
 USING_POSTURE = (
-    worst_metric == "Posture"
+    worst_metric == "Posture Maintenance"
 )
 
 USING_HIP_SWAY = (
@@ -158,6 +202,28 @@ USING_FINISH_STABILITY = (
 USING_TEMPO = (
     worst_metric == "Tempo"
 )
+
+# -------------------------------------------------
+# Anchor the coaching overlay to the swing phase
+# that actually matters for the metric being coached,
+# rather than always using the Top of the backswing.
+# -------------------------------------------------
+
+if USING_POSTURE or USING_HEAD_STABILITY:
+
+    # These are measured at Impact.
+    anchor_frame = impact_frame
+
+elif USING_FINISH_STABILITY:
+
+    # This is measured at the Finish.
+    anchor_frame = finish_frame
+
+else:
+
+    # Lead Arm, Trail Arm, Swing Width, Hip Sway and
+    # Tempo are all judged at the Top of the backswing.
+    anchor_frame = top_frame
 
 # Existing lead arm logic
 
@@ -631,7 +697,7 @@ with mp_pose.Pose(
 
         blend_amount = correction_strength(
             frame_number,
-            top_frame,
+            anchor_frame,
             correction_window_frames
         )
 
@@ -852,25 +918,11 @@ with mp_pose.Pose(
 
             if USING_TEMPO:
 
-                cv2.putText(
-                    frame,
-                    "TEMPO IMPROVEMENT",
-                    (40, 200),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1.0,
-                    (0, 255, 255),
-                    3
-                )
-
-                cv2.putText(
-                    frame,
-                    "Target Tempo: 3.0 : 1",
-                    (40, 250),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 255, 0),
-                    2
-                )
+                # Tempo is a rhythm metric, not a body position,
+                # so it is drawn as an always-on timeline bar
+                # below (outside this per-frame landmark block)
+                # rather than a pose overlay here.
+                pass
 
             elif USING_FINISH_STABILITY:
 
@@ -1026,6 +1078,7 @@ with mp_pose.Pose(
 
             elif USING_POSTURE:
 
+                # Current spine (hip -> shoulders) in red.
                 cv2.line(
                     frame,
                     shoulder_centre_pixels,
@@ -1035,9 +1088,56 @@ with mp_pose.Pose(
                     cv2.LINE_AA
                 )
 
-                target_shoulder = (
-                    shoulder_centre_pixels[0] + 30,
+                # Rotate the spine back toward its address
+                # angle by the measured spine-angle change,
+                # so the green target shows the posture the
+                # golfer should maintain through impact.
+                spine_vector_x = (
+                    shoulder_centre_pixels[0]
+                    - hip_centre_pixels[0]
+                )
+
+                spine_vector_y = (
                     shoulder_centre_pixels[1]
+                    - hip_centre_pixels[1]
+                )
+
+                spine_screen_angle = math.degrees(
+                    math.atan2(
+                        spine_vector_x,
+                        -spine_vector_y
+                    )
+                )
+
+                # Reduce the forward tilt by the amount it
+                # drifted from address, scaled by how close
+                # we are to the anchor frame.
+                correction_degrees = (
+                    current_spine_angle_change
+                    * blend_amount
+                )
+
+                desired_angle = math.radians(
+                    spine_screen_angle
+                    - correction_degrees
+                )
+
+                spine_pixel_length = math.hypot(
+                    spine_vector_x,
+                    spine_vector_y
+                )
+
+                target_shoulder = (
+                    int(
+                        hip_centre_pixels[0]
+                        + spine_pixel_length
+                        * math.sin(desired_angle)
+                    ),
+                    int(
+                        hip_centre_pixels[1]
+                        - spine_pixel_length
+                        * math.cos(desired_angle)
+                    )
                 )
 
                 cv2.line(
@@ -1244,7 +1344,7 @@ with mp_pose.Pose(
         elif USING_POSTURE:
 
             overlay_title = (
-                "GolfAI Suggested Posture"
+                "GolfAI Suggested Posture Maintenance"
             )
 
         elif USING_SWING_WIDTH:
@@ -1267,65 +1367,106 @@ with mp_pose.Pose(
             font_scale=0.75
         )
 
+        # -------------------------------------------------
+        # Panel body: current value + target for the metric
+        # being coached. Each metric shows its own numbers
+        # and units rather than defaulting to lead-arm text.
+        # -------------------------------------------------
+
         if USING_SWING_WIDTH:
 
-            cv2.putText(
-                frame,
-                (
-                    f"Current Width: "
-                    f"{current_swing_width:.3f}"
-                ),
-                (20, 73),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.65,
-                (0, 0, 255),
-                2,
-                cv2.LINE_AA
+            current_line = (
+                f"Current Width: {current_swing_width:.3f}"
             )
 
-            cv2.putText(
-                frame,
-                (
-                    f"Target Width: "
-                    f"{TARGET_SWING_WIDTH:.3f}"
-                ),
-                (20, 104),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.65,
-                (0, 255, 0),
-                2,
-                cv2.LINE_AA
+            target_line = (
+                f"Target Width: {TARGET_SWING_WIDTH:.3f}"
             )
+
+        elif USING_TRAIL_ARM:
+
+            current_line = (
+                f"Current Trail Arm: "
+                f"{current_trail_arm_angle:.1f} degrees"
+            )
+
+            target_line = "Target: 80-90 degrees"
+
+        elif USING_POSTURE:
+
+            current_line = (
+                f"Spine moved: "
+                f"{abs(current_spine_angle_change):.1f} degrees"
+            )
+
+            target_line = "Target: 0-8 degrees"
+
+        elif USING_HIP_SWAY:
+
+            current_line = (
+                f"Current Hip Sway: {current_hip_sway:.3f}"
+            )
+
+            target_line = "Target: <= 0.15"
+
+        elif USING_HEAD_STABILITY:
+
+            current_line = (
+                f"Head Movement: {current_head_movement:.3f}"
+            )
+
+            target_line = "Target: <= 0.02"
+
+        elif USING_FINISH_STABILITY:
+
+            current_line = (
+                f"Finish Movement: {current_finish_stability:.3f}"
+            )
+
+            target_line = "Target: hold a stable finish"
+
+        elif USING_TEMPO:
+
+            current_line = (
+                f"Current Tempo: {current_tempo_ratio:.1f} : 1"
+            )
+
+            target_line = "Target: 3.0 : 1"
 
         else:
 
-            cv2.putText(
-                frame,
-                (
-                    f"Current at Top: "
-                    f"{current_lead_arm_angle:.1f} degrees"
-                ),
-                (20, 73),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.65,
-                (0, 0, 255),
-                2,
-                cv2.LINE_AA
+            # Lead Arm Width (default)
+            current_line = (
+                f"Current at Top: "
+                f"{current_lead_arm_angle:.1f} degrees"
             )
 
-            cv2.putText(
-                frame,
-                (
-                    f"Suggested target: "
-                    f"{suggested_lead_arm_angle:.1f} degrees"
-                ),
-                (20, 104),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.65,
-                (0, 255, 0),
-                2,
-                cv2.LINE_AA
+            target_line = (
+                f"Suggested target: "
+                f"{suggested_lead_arm_angle:.1f} degrees"
             )
+
+        cv2.putText(
+            frame,
+            current_line,
+            (20, 73),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (0, 0, 255),
+            2,
+            cv2.LINE_AA
+        )
+
+        cv2.putText(
+            frame,
+            target_line,
+            (20, 104),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (0, 255, 0),
+            2,
+            cv2.LINE_AA
+        )
 
         if USING_TEMPO:
 
@@ -1373,16 +1514,30 @@ with mp_pose.Pose(
                 "Yellow = move hands wider"
             )
 
-        elif CORRECTION_REQUIRED:
+        elif USING_POSTURE:
+
+            guidance_text = (
+                "Red = current spine | "
+                "Green = address spine | "
+                "Yellow = hold your posture"
+            )
+
+        elif USING_LEAD_ARM and CORRECTION_REQUIRED:
 
             guidance_text = (
                 "Red = current | Green = suggested"
             )
 
-        else:
+        elif USING_LEAD_ARM:
 
             guidance_text = (
                 "Lead arm is already within target range"
+            )
+
+        else:
+
+            guidance_text = (
+                "Red = current | Green = suggested"
             )
 
         cv2.putText(
@@ -1396,12 +1551,141 @@ with mp_pose.Pose(
             cv2.LINE_AA
         )
 
-        # Highlight the exact Top frame.
-        if frame_number == top_frame:
+        # -------------------------------------------------
+        # Tempo timeline bar (always on for the Tempo metric).
+        #
+        # Tempo has no single body position to annotate, so we
+        # show the rhythm visually: a bar split into the actual
+        # backswing and downswing durations, a target bar showing
+        # the ideal 3:1 split, and a playhead marking where the
+        # current frame sits in the swing. This makes it obvious
+        # which half of the swing is out of proportion.
+        # -------------------------------------------------
+
+        if USING_TEMPO:
+
+            backswing_len = max(1, top_frame - address_frame)
+            downswing_len = max(1, impact_frame - top_frame)
+            total_len = backswing_len + downswing_len
+
+            bar_left = 40
+            bar_right = frame_width - 40
+            bar_width = bar_right - bar_left
+
+            current_bar_y = int(frame_height * 0.62)
+            target_bar_y = current_bar_y + 54
+            bar_thickness = 26
+
+            # Where the Top sits along the CURRENT bar
+            # (proportional to real durations).
+            current_split_x = int(
+                bar_left
+                + bar_width * (backswing_len / total_len)
+            )
+
+            # Backswing portion (blue) and downswing portion
+            # (orange) of the golfer's actual swing.
+            cv2.rectangle(
+                frame,
+                (bar_left, current_bar_y),
+                (current_split_x, current_bar_y + bar_thickness),
+                (255, 160, 0),
+                -1
+            )
+
+            cv2.rectangle(
+                frame,
+                (current_split_x, current_bar_y),
+                (bar_right, current_bar_y + bar_thickness),
+                (0, 140, 255),
+                -1
+            )
+
+            # Target bar: ideal 3:1 split (3/4 backswing).
+            target_split_x = int(
+                bar_left + bar_width * (3.0 / 4.0)
+            )
+
+            cv2.rectangle(
+                frame,
+                (bar_left, target_bar_y),
+                (target_split_x, target_bar_y + bar_thickness),
+                (0, 200, 0),
+                -1
+            )
+
+            cv2.rectangle(
+                frame,
+                (target_split_x, target_bar_y),
+                (bar_right, target_bar_y + bar_thickness),
+                (0, 90, 0),
+                -1
+            )
+
+            # Dashed guide so you can compare where your Top is
+            # versus where the target Top should be.
+            cv2.line(
+                frame,
+                (target_split_x, current_bar_y - 6),
+                (target_split_x, target_bar_y + bar_thickness + 6),
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA
+            )
+
+            # Playhead: where the current frame is in the swing.
+            if total_len > 0:
+                progress = (
+                    (frame_number - address_frame) / total_len
+                )
+                progress = max(0.0, min(1.0, progress))
+                playhead_x = int(bar_left + bar_width * progress)
+
+                cv2.line(
+                    frame,
+                    (playhead_x, current_bar_y - 10),
+                    (playhead_x, current_bar_y + bar_thickness + 10),
+                    (0, 0, 255),
+                    3,
+                    cv2.LINE_AA
+                )
+
+            # Labels.
+            cv2.putText(
+                frame,
+                f"Your tempo: {current_tempo_ratio:.1f} : 1",
+                (bar_left, current_bar_y - 14),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA
+            )
 
             cv2.putText(
                 frame,
-                "TOP OF BACKSWING",
+                "Target: 3.0 : 1 (longer, smoother backswing)",
+                (bar_left, target_bar_y + bar_thickness + 24),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA
+            )
+
+        # Highlight the exact anchor frame for this metric.
+        if frame_number == anchor_frame:
+
+            if anchor_frame == impact_frame:
+                phase_label = "IMPACT"
+            elif anchor_frame == finish_frame:
+                phase_label = "FINISH"
+            else:
+                phase_label = "TOP OF BACKSWING"
+
+            cv2.putText(
+                frame,
+                phase_label,
                 (
                     20,
                     frame_height - 30

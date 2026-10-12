@@ -64,15 +64,21 @@ mp_pose = mp.solutions.pose
 
 landmarks_by_frame = []
 
-def angle_between_three_points(point_a, point_b, point_c):
+def angle_between_three_points(point_a, point_b, point_c, x_scale=1.0):
     """
     Calculates the angle at point_b formed by:
     point_a -> point_b -> point_c
+
+    x_scale corrects for the video aspect ratio. MediaPipe
+    normalises x and y independently, so on a portrait video
+    the horizontal axis is compressed relative to vertical.
+    Scaling x by the aspect ratio restores true geometry so
+    joint angles (like a folded elbow) are measured correctly.
     """
 
-    a = (point_a.x, point_a.y)
-    b = (point_b.x, point_b.y)
-    c = (point_c.x, point_c.y)
+    a = (point_a.x * x_scale, point_a.y)
+    b = (point_b.x * x_scale, point_b.y)
+    c = (point_c.x * x_scale, point_c.y)
 
     ba = (a[0] - b[0], a[1] - b[1])
     bc = (c[0] - b[0], c[1] - b[1])
@@ -159,12 +165,18 @@ with mp_pose.Pose(
     min_tracking_confidence=0.5
 ) as pose:
 
+    frame_width = 0
+    frame_height = 0
+
     while cap.isOpened():
 
         success, frame = cap.read()
 
         if not success:
             break
+
+        if frame_width == 0:
+            frame_height, frame_width = frame.shape[:2]
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -176,6 +188,17 @@ with mp_pose.Pose(
             landmarks_by_frame.append(None)
 
 cap.release()
+
+
+# Aspect ratio of the source video. MediaPipe landmarks are
+# normalised to [0, 1] on each axis independently, so on a
+# non-square frame the raw x and y are on different pixel
+# scales. Correcting x by the aspect ratio makes measured
+# angles reflect true on-screen geometry.
+if frame_height > 0:
+    aspect_ratio = frame_width / frame_height
+else:
+    aspect_ratio = 1.0
 
 def get_landmarks(frame_number):
 
@@ -344,52 +367,309 @@ top_right_wrist = top[
     mp_pose.PoseLandmark.RIGHT_WRIST
 ]
 
-left_arm_angle = angle_between_three_points(
-    top_left_shoulder,
-    top_left_elbow,
-    top_left_wrist
+# -------------------------------------------------
+# Robust elbow-angle measurement at the top.
+#
+# The trail arm is often partly hidden behind the head
+# and body at the top of the backswing, so a single
+# frame can give a wildly wrong angle (MediaPipe guesses
+# the occluded joint). To stay accurate we:
+#   1. Fix handedness: right-handed golfer => left arm is
+#      the lead arm, right arm is the trail arm. (This
+#      matches the stated assumption used elsewhere and
+#      avoids a fragile "straightest arm is the lead"
+#      guess that noisy landmarks can flip.)
+#   2. Measure across a small window around the Top and
+#      take the median, weighting toward frames where the
+#      elbow and wrist are actually visible.
+#   3. Correct for the video aspect ratio.
+# -------------------------------------------------
+
+def measured_elbow_angle(landmarks, shoulder_id, elbow_id, wrist_id):
+
+    return angle_between_three_points(
+        landmarks[shoulder_id],
+        landmarks[elbow_id],
+        landmarks[wrist_id],
+        aspect_ratio
+    )
+
+
+def joint_visibility(landmarks, elbow_id, wrist_id):
+
+    return min(
+        landmarks[elbow_id].visibility,
+        landmarks[wrist_id].visibility
+    )
+
+
+def robust_arm_angle_at_top(shoulder_id, elbow_id, wrist_id):
+    """Median elbow angle over a window around the Top frame.
+
+    Only frames where the elbow and wrist are reasonably
+    visible are used; this rejects the occlusion spikes that
+    otherwise corrupt a single-frame reading.
+    """
+
+    window = max(
+        2,
+        round(video_fps * 0.12)
+    )
+
+    visible_angles = []
+    all_angles = []
+
+    for frame_index in range(
+        TOP_FRAME - window,
+        TOP_FRAME + window + 1
+    ):
+
+        if (
+            frame_index < 0
+            or frame_index >= len(landmarks_by_frame)
+        ):
+            continue
+
+        landmarks = landmarks_by_frame[frame_index]
+
+        if landmarks is None:
+            continue
+
+        angle_value = measured_elbow_angle(
+            landmarks,
+            shoulder_id,
+            elbow_id,
+            wrist_id
+        )
+
+        all_angles.append(angle_value)
+
+        if joint_visibility(landmarks, elbow_id, wrist_id) >= 0.6:
+            visible_angles.append(angle_value)
+
+    chosen = visible_angles if visible_angles else all_angles
+
+    if not chosen:
+        return 0.0
+
+    chosen.sort()
+
+    return chosen[len(chosen) // 2]
+
+
+def angle_between_three_points_3d(point_a, point_b, point_c):
+    """Angle at point_b in true 3D space (degrees).
+
+    Used with MediaPipe pose_world_landmarks, which estimate
+    joint positions in metres. A 3D angle is not fooled by
+    foreshortening, so a trail elbow pointing toward the
+    camera is still measured as its real anatomical bend.
+    """
+
+    bax = point_a.x - point_b.x
+    bay = point_a.y - point_b.y
+    baz = point_a.z - point_b.z
+
+    bcx = point_c.x - point_b.x
+    bcy = point_c.y - point_b.y
+    bcz = point_c.z - point_b.z
+
+    dot = (bax * bcx) + (bay * bcy) + (baz * bcz)
+
+    magnitude_ba = math.sqrt(
+        bax * bax + bay * bay + baz * baz
+    )
+
+    magnitude_bc = math.sqrt(
+        bcx * bcx + bcy * bcy + bcz * bcz
+    )
+
+    if magnitude_ba == 0 or magnitude_bc == 0:
+        return 0.0
+
+    cosine = max(
+        -1.0,
+        min(1.0, dot / (magnitude_ba * magnitude_bc))
+    )
+
+    return math.degrees(math.acos(cosine))
+
+
+def heavy_arm_angles_at_top():
+    """Measure both elbow angles at the Top using the heavy model.
+
+    The light model (used for the main pass) frequently places
+    the trail arm on the club/hands at the top of the backswing,
+    producing a far-too-straight angle. The heavy model
+    (model_complexity=2) locates the arm much more reliably, and
+    its 3D world landmarks give an angle that is immune to the
+    foreshortening of a single side-on camera.
+
+    We run the heavy model only on a short window of frames
+    around the Top so the extra cost stays small, then take the
+    median angle over frames where the joints are visible.
+
+    Returns (lead_angle, trail_angle), or (None, None) if the
+    heavy pass could not produce a reading.
+    """
+
+    # Keep the window tight around the genuine Top. Frames
+    # further away are already moving out of the top position
+    # and read straighter, which biases the median, so a
+    # narrow window gives the most faithful reading.
+    window = max(
+        2,
+        round(video_fps * 0.08)
+    )
+
+    start_frame = max(0, TOP_FRAME - window)
+    end_frame = TOP_FRAME + window
+
+    lead_angles = []
+    trail_angles = []
+
+    capture = cv2.VideoCapture(video_path)
+    capture.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+    try:
+        with mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=2,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        ) as heavy_pose:
+
+            frame_index = start_frame
+
+            while frame_index <= end_frame:
+
+                success, frame = capture.read()
+
+                if not success:
+                    break
+
+                results = heavy_pose.process(
+                    cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                )
+
+                frame_index += 1
+
+                if not results.pose_world_landmarks:
+                    continue
+
+                screen = results.pose_landmarks.landmark
+                world = results.pose_world_landmarks.landmark
+
+                # Lead (left) arm.
+                if (
+                    joint_visibility(
+                        screen,
+                        mp_pose.PoseLandmark.LEFT_ELBOW,
+                        mp_pose.PoseLandmark.LEFT_WRIST
+                    ) >= 0.5
+                ):
+                    lead_angles.append(
+                        angle_between_three_points_3d(
+                            world[mp_pose.PoseLandmark.LEFT_SHOULDER],
+                            world[mp_pose.PoseLandmark.LEFT_ELBOW],
+                            world[mp_pose.PoseLandmark.LEFT_WRIST]
+                        )
+                    )
+
+                # Trail (right) arm.
+                if (
+                    joint_visibility(
+                        screen,
+                        mp_pose.PoseLandmark.RIGHT_ELBOW,
+                        mp_pose.PoseLandmark.RIGHT_WRIST
+                    ) >= 0.5
+                ):
+                    trail_angles.append(
+                        angle_between_three_points_3d(
+                            world[mp_pose.PoseLandmark.RIGHT_SHOULDER],
+                            world[mp_pose.PoseLandmark.RIGHT_ELBOW],
+                            world[mp_pose.PoseLandmark.RIGHT_WRIST]
+                        )
+                    )
+
+    finally:
+        capture.release()
+
+    def median(values):
+        if not values:
+            return None
+        values.sort()
+        return values[len(values) // 2]
+
+    return median(lead_angles), median(trail_angles)
+
+
+# Right-handed golfer convention.
+LEAD_SHOULDER = mp_pose.PoseLandmark.LEFT_SHOULDER
+LEAD_ELBOW = mp_pose.PoseLandmark.LEFT_ELBOW
+LEAD_WRIST = mp_pose.PoseLandmark.LEFT_WRIST
+
+TRAIL_SHOULDER = mp_pose.PoseLandmark.RIGHT_SHOULDER
+TRAIL_ELBOW = mp_pose.PoseLandmark.RIGHT_ELBOW
+TRAIL_WRIST = mp_pose.PoseLandmark.RIGHT_WRIST
+
+# Light-model 2D fallback values.
+lead_arm_angle_2d = robust_arm_angle_at_top(
+    LEAD_SHOULDER,
+    LEAD_ELBOW,
+    LEAD_WRIST
 )
 
-right_arm_angle = angle_between_three_points(
-    top_right_shoulder,
-    top_right_elbow,
-    top_right_wrist
+trail_arm_angle_2d = robust_arm_angle_at_top(
+    TRAIL_SHOULDER,
+    TRAIL_ELBOW,
+    TRAIL_WRIST
 )
 
-ARM_ROLE_MIN_DIFFERENCE = 15.0
+# Preferred: heavy-model 3D measurement around the Top.
+print("")
+print("Measuring arm angles with heavy model (3D)...")
 
+heavy_lead_angle, heavy_trail_angle = heavy_arm_angles_at_top()
+
+lead_arm_angle = (
+    heavy_lead_angle
+    if heavy_lead_angle is not None
+    else lead_arm_angle_2d
+)
+
+trail_arm_angle = (
+    heavy_trail_angle
+    if heavy_trail_angle is not None
+    else trail_arm_angle_2d
+)
+
+lead_arm_measurement_source = (
+    "heavy_3d" if heavy_lead_angle is not None else "light_2d"
+)
+
+trail_arm_measurement_source = (
+    "heavy_3d" if heavy_trail_angle is not None else "light_2d"
+)
+
+print(
+    f"Lead arm: {lead_arm_angle:.1f} "
+    f"({lead_arm_measurement_source})"
+)
+print(
+    f"Trail arm: {trail_arm_angle:.1f} "
+    f"({trail_arm_measurement_source})"
+)
+
+lead_arm_side = "left"
+trail_arm_side = "right"
+
+# Kept for the diagnostic print below.
+left_arm_angle = lead_arm_angle
+right_arm_angle = trail_arm_angle
 arm_angle_difference = abs(
-    left_arm_angle
-    - right_arm_angle
+    lead_arm_angle - trail_arm_angle
 )
-
-if arm_angle_difference >= ARM_ROLE_MIN_DIFFERENCE:
-
-    if left_arm_angle >= right_arm_angle:
-
-        lead_arm_angle = left_arm_angle
-        trail_arm_angle = right_arm_angle
-
-        lead_arm_side = "left"
-        trail_arm_side = "right"
-
-    else:
-
-        lead_arm_angle = right_arm_angle
-        trail_arm_angle = left_arm_angle
-
-        lead_arm_side = "right"
-        trail_arm_side = "left"
-
-else:
-
-    # Fallback for a right-handed golfer when the
-    # two detected angles are too similar to classify reliably.
-    lead_arm_angle = left_arm_angle
-    trail_arm_angle = right_arm_angle
-
-    lead_arm_side = "left"
-    trail_arm_side = "right"
 
 # -------------------------
 # Swing Width
@@ -584,12 +864,40 @@ impact_hip_midpoint = midpoint(
     impact_right_hip
 )
 
-address_spine_angle = line_angle(
+def spine_angle_aspect_corrected(hip_midpoint, shoulder_midpoint):
+    """Spine line angle in degrees, corrected for frame aspect ratio.
+
+    Measures the tilt of the hip->shoulder line relative to vertical
+    (straight up = 0 degrees, leaning forward increases the value),
+    using true on-screen geometry rather than normalised coordinates.
+    """
+
+    dx = (
+        shoulder_midpoint["x"]
+        - hip_midpoint["x"]
+    ) * aspect_ratio
+
+    dy = (
+        shoulder_midpoint["y"]
+        - hip_midpoint["y"]
+    )
+
+    # Angle from the vertical (upward) axis. dy is negative when the
+    # shoulders are above the hips, as expected for a standing golfer.
+    return math.degrees(
+        math.atan2(dx, -dy)
+    )
+
+
+# Spine angle measured between Address and Impact.
+# The change is what the "Posture Maintenance" metric reports:
+# how much the spine tilt moves from its address position by impact.
+address_spine_angle = spine_angle_aspect_corrected(
     address_hip_midpoint,
     address_shoulder_midpoint
 )
 
-impact_spine_angle = line_angle(
+impact_spine_angle = spine_angle_aspect_corrected(
     impact_hip_midpoint,
     impact_shoulder_midpoint
 )

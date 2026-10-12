@@ -270,7 +270,7 @@ METRIC_TARGETS = {
     "Trail Arm Angle":
         "🎯 Target: 80°-90°. A folded trail arm creates leverage at the top.",
 
-    "Spine Angle Change":
+    "Posture Maintenance":
         "🎯 Target: As close to 0° as possible, ≤ 8 is excellent.",
 
     "Tempo Ratio":
@@ -320,7 +320,7 @@ DRILL_MAP = {
             "https://www.youtube.com/watch?v=2FmhOSsOLuM"
     },
 
-    "Posture": {
+    "Posture Maintenance": {
         "name": "Chair Posture Drill",
         "description":
             "Helps maintain spine angle and posture "
@@ -412,7 +412,7 @@ def compare_metric(metric_name, value_1, value_2):
             else compare_2
         )
 
-    elif metric_name == "Spine Angle Change":
+    elif metric_name == "Posture Maintenance":
 
         return (
             compare_1
@@ -658,7 +658,7 @@ if page == "Analyse Swing":
 
             ---
 
-            **Spine Angle Change**
+            **Posture Maintenance**
             🎯 Target: As close to 0° as possible, ≤ 8 is excellent
 
             Measures how much spine angle changes between Address and Impact.
@@ -938,7 +938,7 @@ if page == "Analyse Swing":
                 )
 
                 # -------------------------
-                # Spine Angle Change Score
+                # Posture Maintenance Score
                 # Lower is better
                 # -------------------------
 
@@ -1039,7 +1039,7 @@ if page == "Analyse Swing":
                     "Head Stability": head_score,
                     "Lead Arm Width": lead_arm_score,
                     "Trail Arm Position": trail_arm_score,
-                    "Posture": spine_score,
+                    "Posture Maintenance": spine_score,
                     "Tempo": tempo_score,
                     "Swing Width": width_score,
                     "Hip Sway": hip_sway_score,
@@ -1251,7 +1251,7 @@ if page == "Analyse Swing":
                         )
 
                         st.metric(
-                            "Spine Angle Change",
+                            "Posture Maintenance",
                             round(spine_change, 2)
                         )
 
@@ -1619,7 +1619,7 @@ if page == "Analyse Swing":
                             "This can improve arm structure and transition control."
                     },
 
-                    "Posture": {
+                    "Posture Maintenance": {
                         "why":
                             "The measured spine-angle change between Address "
                             "and Impact is larger than GolfAI's target.",
@@ -2253,7 +2253,7 @@ if (
             ),
 
             (
-                "Spine Angle Change",
+                "Posture Maintenance",
                 "spine_angle_change_degrees"
             ),
 
