@@ -636,22 +636,38 @@ correction_window_frames = max(
 # Create output video
 # -------------------------
 
-fourcc = cv2.VideoWriter_fourcc(
-    *"avc1"
-)
+# Browsers (and Streamlit's st.video) can only play H.264 in an
+# MP4 container. "mp4v"/"FMP4" produces a file that opens in
+# OpenCV but shows a black, unplayable frame in the browser, so
+# we must write H.264. Try the browser-friendly codecs first and
+# fall back only if none are available in this OpenCV build.
+output_fps = fps / 2  # Suggested video plays at half speed.
 
-writer = cv2.VideoWriter(
-    str(output_video_path),
-    fourcc,
-    fps / 2, #Makes the suggested post-video go 2x slower than origional
-    (
-        frame_width,
-        frame_height
+writer = None
+
+for codec_name in ("avc1", "H264", "h264", "mp4v"):
+
+    candidate_fourcc = cv2.VideoWriter_fourcc(*codec_name)
+
+    candidate_writer = cv2.VideoWriter(
+        str(output_video_path),
+        candidate_fourcc,
+        output_fps,
+        (
+            frame_width,
+            frame_height
+        )
     )
-)
+
+    if candidate_writer.isOpened():
+        writer = candidate_writer
+        print(f"Writing video with codec: {codec_name}")
+        break
+
+    candidate_writer.release()
 
 
-if not writer.isOpened():
+if writer is None or not writer.isOpened():
 
     print(
         "Could not create the output video."

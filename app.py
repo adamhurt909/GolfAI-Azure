@@ -23,7 +23,7 @@ st.write(
     "calculate movement metrics, and generate AI coaching feedback."
 )
 
-st.caption("GolfAI Container Version 3: 02-Oct-2026")
+st.caption("GolfAI Container Version 4: 12-Oct-2026")
 
 page = st.sidebar.radio(
     "Navigation",
@@ -1498,11 +1498,17 @@ if page == "Analyse Swing":
                             comparison_result.stderr
                         )
 
-                if (
-                    overlay_result.returncode == 0
-                    and coaching_overlay_path.exists()
-                    and coaching_overlay_path.stat().st_size > 0
-                ):
+                # Treat the video as created if the file exists and
+                # is non-trivially sized. The subprocess return code
+                # alone is unreliable on Windows, where OpenCV's
+                # codec probing can emit non-zero/noisy results even
+                # when a valid H.264 file was written.
+                overlay_file_ok = (
+                    coaching_overlay_path.exists()
+                    and coaching_overlay_path.stat().st_size > 1000
+                )
+
+                if overlay_file_ok:
 
                     st.success(
                         "Suggested-pose video created."
@@ -1535,29 +1541,40 @@ if page == "Analyse Swing":
 
             if coaching_overlay_path.exists():
 
-                col1, col2 = st.columns([1, 1])
-
-                with col1:
-
-                    st.video(
-                        str(coaching_overlay_path)
-                    )
-
                 with open(
                     coaching_overlay_path,
                     "rb"
-                ) as overlay_file:
+                ) as video_file:
 
-                    st.download_button(
-                        label="⬇️ Download Suggested-Pose Video",
-                        data=overlay_file.read(),
-                        file_name=(
-                            f"{video_name}"
-                            f"_suggested_pose.mp4"
-                        ),
-                        mime="video/mp4",
-                        key=f"download_overlay_{video_name}"
+                    video_bytes = video_file.read()
+
+                # Keep the suggested-pose video at half width to
+                # match the original uploaded video's layout,
+                # rather than letting it span the full page.
+                overlay_col, _overlay_spacer = st.columns([1, 1])
+
+                with overlay_col:
+
+                    st.video(
+                        video_bytes,
+                        format="video/mp4"
                     )
+
+                    with open(
+                        coaching_overlay_path,
+                        "rb"
+                    ) as overlay_file:
+
+                        st.download_button(
+                            label="⬇️ Download Suggested-Pose Video",
+                            data=overlay_file.read(),
+                            file_name=(
+                                f"{video_name}"
+                                f"_suggested_pose.mp4"
+                            ),
+                            mime="video/mp4",
+                            key=f"download_overlay_{video_name}"
+                        )
 
             if comparison_image_path.exists():
 
@@ -1574,7 +1591,7 @@ if page == "Analyse Swing":
 
                 st.image(
                     str(comparison_image_path),
-                    use_container_width=True
+                    width=1200
                 )
 
                 COMPARISON_NOTES = {
